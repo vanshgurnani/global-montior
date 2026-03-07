@@ -42,6 +42,7 @@ class MarketPipeline:
                 {
                     "symbol": snap["symbol"],
                     "name": snap["name"],
+                    "asset_type": snap.get("asset_type", "stock"),
                     "price": snap["price"],
                     "momentum_7d": snap["momentum_7d"],
                     "volume_spike_pct": snap["volume_spike_pct"],

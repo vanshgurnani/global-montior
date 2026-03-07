@@ -1,74 +1,97 @@
 # Global Intelligence Monitor
 
-AI-powered global monitoring platform for geopolitical signals and market probability forecasting.
+AI-powered geopolitical monitoring platform with conflict intelligence, real-time sentiment analytics, market impact modeling, and multi-panel operations dashboard.
 
-## Core Capabilities
-- Multi-source news ingestion from GDELT + NewsAPI + RSS feeds
-- Geopolitical keyword filtering (`war`, `sanctions`, `military`, `invasion`, `oil`, `economy`)
-- HuggingFace sentiment analysis with fallback mode
-- War risk scoring from sentiment + keyword density
-- Market analytics using yfinance for major global indices
-- Trainable XGBoost market model (direction + 5-day return)
-- Professional dashboard with live world risk map, zoom/pan, and live news stream (SSE)
-- Manual refresh workflow (user-triggered ingestion + model predictions)
-- Dockerized deployment for Railway / Render / VPS
+## What It Does
+- Ingests live news from GDELT + NewsAPI + RSS
+- Runs sentiment and war-risk scoring per article
+- Detects and classifies high-impact events (war, sanctions, diplomacy, economic crisis, terrorism)
+- Builds a global risk index (war + energy + market)
+- Tracks conflict theaters (Russia-Ukraine, Israel-Hamas, Taiwan Strait)
+- Monitors chokepoints (Hormuz, Suez, Bab el-Mandeb, Taiwan Strait)
+- Surfaces military, nuclear, and civil unrest signals
+- Produces AI-style short intelligence briefings + event timeline
+- Predicts market direction and 5-day return probabilities
+- Tracks stocks and crypto datasets
+- Provides country drill-down intelligence snapshots
 
-## Folder Structure
+## Tech Stack
+- Backend: FastAPI + MongoDB
+- Frontend: React + Vite + TypeScript
+- Data/Sources: yfinance, GDELT, NewsAPI, RSS, YouTube channels
+
+## Project Structure
 ```text
-global-intelligence-monitor/
+global-montior/
   backend/
     app/
       api/routes/
       core/
       jobs/
-      models/
       schemas/
       services/
-      main.py
     requirements.txt
     Dockerfile
-    .env.example
+    .env
   frontend/
-    app/
+    src/
     components/
     lib/
-    Dockerfile
     package.json
-    .env.example
+    vite.config.ts
+    Dockerfile
+    .env
   docker-compose.yml
   README.md
 ```
 
-## Backend Architecture
-- `NewsService`: pulls and stores articles
-- `SentimentService`: transformer-based sentiment scoring
-- `WarRiskService`: keyword density and country extraction
-- `StockService`: market index analytics (momentum, volume spike, MA20/MA50)
-- `PredictionService`: trains XGBoost models from historical index data and predicts UP/DOWN + 5D return
-- `MarketPipeline`: combines macro signals + market features into predictions
+## Key Backend Services
+- `NewsService`: ingestion + normalization + scoring
+- `SentimentService`: sentiment model wrapper with fallback
+- `WarRiskService`: keyword/country extraction + risk scoring
+- `StockService`: pulls indices, equities, ETFs, crypto snapshots
+- `PredictionService`: market probability + return prediction engine
+- `IntelligenceService`: conflict tracker, timeline, alerts, forecasts, country dashboard
 
-## Tracked Indices
-- S&P 500 (`^GSPC`)
-- NASDAQ (`^IXIC`)
-- NIFTY 50 (`^NSEI`)
-- FTSE 100 (`^FTSE`)
-- Nikkei 225 (`^N225`)
+## Main API Endpoints
+- `GET /api/v1/health`
+- `GET /api/v1/news/latest?limit=20`
+- `GET /api/v1/news/stream?limit=15&interval_seconds=8`
+- `GET /api/v1/news/live-channels`
+- `GET /api/v1/risk/overview`
+- `GET /api/v1/risk/map-layers`
+- `GET /api/v1/markets/snapshots`
+- `GET /api/v1/markets/top-gainers?limit=5`
+- `GET /api/v1/markets/stocks?limit=25`
+- `GET /api/v1/markets/crypto?limit=25`
+- `GET /api/v1/intelligence/dashboard`
+- `GET /api/v1/intelligence/country/{country}`
+- `POST /api/v1/jobs/refresh`
 
-## Stock Universe
-- Default mode tracks a broad universe (global indices + ETFs + major US/Europe/Asia stocks).
-- Configure with env vars in `backend/.env`:
-  - `STOCK_SYMBOLS=DEFAULT` or comma-separated symbols (example: `DEFAULT,ADBE,NFLX,AMD`)
-  - `STOCK_HISTORY_PERIOD=6mo`
-  - `STOCK_MIN_POINTS=55`
+## Environment Variables
+Set in `backend/.env`:
+- `MONGODB_URL`
+- `MONGODB_DB_NAME`
+- `NEWS_PROVIDER`
+- `NEWS_SOURCES`
+- `NEWS_API_KEY`
+- `YOUTUBE_API_KEY`
+- `CORS_ORIGINS=http://localhost:3000,http://localhost:5173`
+- `STOCK_SYMBOLS=DEFAULT` (supports custom CSV and crypto symbols like `BTC-USD`)
+- `STOCK_HISTORY_PERIOD=6mo`
+- `STOCK_MIN_POINTS=55`
+- `STOCK_MAX_SYMBOLS=30`
 
-## Local Run (No Docker)
+Set in `frontend/.env`:
+- `VITE_API_BASE=http://localhost:8000/api/v1`
+
+## Run Locally
 ### 1) Backend
 ```bash
 cd backend
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -76,14 +99,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
 ### 3) MongoDB
-Run local MongoDB and set `MONGODB_URL` + `MONGODB_DB_NAME` in `backend/.env`.
+Run MongoDB locally (or use Docker) and ensure backend env vars point to it.
 
-## Docker Run
+## Run with Docker
 ```bash
 docker compose up --build
 ```
@@ -91,46 +113,12 @@ docker compose up --build
 - Backend: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
-## Sample API Endpoints
-- `GET /api/v1/health`
-- `GET /api/v1/news/latest?limit=20`
-- `GET /api/v1/news/stream?limit=15&interval_seconds=8` (Server-Sent Events)
-- `GET /api/v1/risk/overview`
-- `GET /api/v1/markets/snapshots`
-- `GET /api/v1/markets/top-gainers?limit=5`
-- `POST /api/v1/jobs/run-ingestion`
-- `POST /api/v1/jobs/run-market-refresh`
-- `POST /api/v1/jobs/refresh` (train + ingest + market refresh)
-- `POST /api/v1/jobs/train-model` (force retrain)
-
-## Prediction Logic (v2)
-Training data:
-- Historical daily bars from `^GSPC`, `^IXIC`, `^NSEI`, `^FTSE`, `^N225`
-- Historical VIX (`^VIX`)
-
-Model features:
-- 7-day momentum %
-- Volume spike %
-- MA20/MA50 gap %
-- VIX level
-- Macro adjustment at inference: sentiment score + keyword risk
-
-Targets:
-- Classification: next 5-day direction (UP/DOWN)
-- Regression: next 5-day return %
-
-Outputs per index snapshot:
-- `prob_up`
-- `prob_down`
-- `predicted_return_5d`
-- `confidence`
-- `model_used` (`xgboost` or fallback `rule_based`)
-- `risk_level` (`Low` / `Medium` / `High`)
-
-## Deployment Notes
-- Railway/Render: deploy `backend` and `frontend` as two services.
-- Add managed MongoDB and inject env vars.
-- Use a scheduler worker or keep APScheduler in backend process.
+## Dashboard Notes
+- Live News Channels carousel now supports:
+  - auto-switch every 12 seconds
+  - hover pause
+  - manual channel selection
+  - `Auto switch ON/OFF` toggle
 
 ## Disclaimer
-**Not financial advice.**
+Not financial advice.

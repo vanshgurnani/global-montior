@@ -66,10 +66,40 @@ DEFAULT_SYMBOL_MAP = {
     "INFY.NS": "Infosys",
     "BABA": "Alibaba",
     "TSM": "TSMC",
+    # Crypto
+    "BTC-USD": "Bitcoin",
+    "ETH-USD": "Ethereum",
+    "SOL-USD": "Solana",
+    "BNB-USD": "BNB",
+    "XRP-USD": "XRP",
+    "DOGE-USD": "Dogecoin",
+}
+
+ETF_SYMBOLS = {
+    "SPY",
+    "QQQ",
+    "DIA",
+    "IWM",
+    "EFA",
+    "EEM",
+    "EWJ",
+    "EWG",
+    "EWU",
+    "FXI",
+    "INDA",
 }
 
 
 class StockService:
+    def _asset_type(self, symbol: str) -> str:
+        if symbol.endswith("-USD"):
+            return "crypto"
+        if symbol.startswith("^"):
+            return "index"
+        if symbol in ETF_SYMBOLS:
+            return "etf"
+        return "stock"
+
     def _symbol_map(self) -> dict[str, str]:
         raw = (settings.stock_symbols or "").strip()
         if not raw or raw.upper() == "DEFAULT":
@@ -129,6 +159,7 @@ class StockService:
                 {
                     "symbol": symbol,
                     "name": name,
+                    "asset_type": self._asset_type(symbol),
                     "price": latest_price,
                     "momentum_7d": round(momentum_7d, 4),
                     "volume_spike_pct": round(volume_spike_pct, 4),

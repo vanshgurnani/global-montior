@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class MarketSnapshotOut(BaseModel):
     symbol: str
     name: str
+    asset_type: Optional[str] = None
     price: float
     momentum_7d: float
     volume_spike_pct: float
