@@ -1,12 +1,10 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 
 import { RiskMap } from "@/components/RiskMap";
 import { TrendChart } from "@/components/TrendChart";
 import { api, type LiveChannel, type MarketSnapshot, type NewsArticle, type RefreshResult, type RiskOverview } from "@/lib/api";
 
-export default function DashboardPage() {
+export default function App() {
   const [risk, setRisk] = useState<RiskOverview | null>(null);
   const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
   const [news, setNews] = useState<NewsArticle[]>([]);
@@ -129,10 +127,10 @@ export default function DashboardPage() {
       {refreshResult ? (
         <p className="status-line">
           model_trained={String(refreshResult.training?.trained ?? false)}, samples=
-          {Math.round(refreshResult.training?.metrics?.samples ?? 0)}, 
-          Refresh result: provider={refreshResult.news?.provider ?? "n/a"}, sources=
-          {(refreshResult.news?.sources || []).join(",") || "n/a"}, fetched={refreshResult.news?.fetched ?? 0},
-          inserted={refreshResult.news?.inserted ?? 0}, by_source=
+          {Math.round(refreshResult.training?.metrics?.samples ?? 0)}, Refresh result: provider=
+          {refreshResult.news?.provider ?? "n/a"}, sources=
+          {(refreshResult.news?.sources || []).join(",") || "n/a"}, fetched={refreshResult.news?.fetched ?? 0}, inserted=
+          {refreshResult.news?.inserted ?? 0}, by_source=
           {JSON.stringify(refreshResult.news?.source_counts || {})}, market_refreshed=
           {refreshResult.markets?.refreshed ?? 0}
           {refreshResult.errors.length > 0 ? `, errors=${refreshResult.errors.join(" | ")}` : ""}

@@ -15,6 +15,7 @@
 
 body {
   margin: 0;
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   color: var(--text);
   background: radial-gradient(circle at top right, #1e293b 0%, var(--bg-a) 42%), linear-gradient(160deg, var(--bg-a), var(--bg-b));
   min-height: 100vh;

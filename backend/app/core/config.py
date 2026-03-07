@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
@@ -34,7 +35,12 @@ class Settings(BaseSettings):
     model_auto_train_on_refresh: bool = False
     model_train_retry_minutes: int = 60
 
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return origins or ["http://localhost:3000", "http://localhost:5173"]
 
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
 
