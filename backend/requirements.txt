@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pymongo
+python-dotenv
+pydantic-settings
+requests
+apscheduler
+transformers
+torch
+yfinance
+pandas
+numpy
+xgboost
+scikit-learn
