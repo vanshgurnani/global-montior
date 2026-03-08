@@ -482,7 +482,7 @@ class IntelligenceService:
             "geopolitical_forecast_panel": forecast,
             "multi_screen_layout": {"enabled": True, "panels": 6},
             "ui_mode": {
-                "theme": "advanced-dark",
+                "theme": "boomerang-terminal",
                 "density": "high",
                 "global_instability_score": instability,
                 "attention_mode": instability >= 0.65,

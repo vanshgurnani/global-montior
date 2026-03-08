@@ -240,7 +240,7 @@ export default function App() {
         </section>
 
         <section className="side-pane">
-          <div className="card pane-scroll">
+          <div className="card live-channel-card">
             <h3>High-Risk Countries</h3>
             <ul className="list">
               {(risk?.high_risk_countries || []).map((c) => (
@@ -252,50 +252,6 @@ export default function App() {
                 </li>
               ))}
             </ul>
-          </div>
-
-          <div className="card pane-scroll">
-            <h3>Live News Stream</h3>
-            <ul className="list">
-              {news.slice(0, 8).map((item) => (
-                <li key={item.url} className="news-item">
-                  <a href={item.url} target="_blank" rel="noreferrer">
-                    {item.title}
-                  </a>
-                  <span>{item.source}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section className="bottom-pane">
-          <div className="card pane-scroll">
-            <h3>Top Predicted Gainers</h3>
-            <table className="table compact-table">
-              <thead>
-                <tr>
-                  <th>Index</th>
-                  <th>Price</th>
-                  <th>Prob Up</th>
-                  <th>Pred 5D</th>
-                  <th>Conf</th>
-                  <th>Risk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topGainers.map((g) => (
-                  <tr key={g.symbol}>
-                    <td>{g.name}</td>
-                    <td>{g.price.toFixed(2)}</td>
-                    <td>{(g.prob_up * 100).toFixed(1)}%</td>
-                    <td>{typeof g.predicted_return_5d === "number" ? `${g.predicted_return_5d.toFixed(2)}%` : "--"}</td>
-                    <td>{typeof g.confidence === "number" ? `${(g.confidence * 100).toFixed(0)}%` : "--"}</td>
-                    <td>{g.risk_level}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
 
           <div className="card pane-scroll">
@@ -353,9 +309,36 @@ export default function App() {
               ) : null}
             </p>
             <p className="video-help">YouTube API mode: {youtubeApiEnabled ? "enabled" : "fallback stream lookup"}</p>
-            <button type="button" className="video-auto-toggle" onClick={() => setAutoRotateChannels((v) => !v)}>
-              Auto switch: {autoRotateChannels ? "ON" : "OFF"}
-            </button>
+          </div>
+        </section>
+
+        <section className="bottom-pane">
+          <div className="card pane-scroll">
+            <h3>Top Predicted Gainers</h3>
+            <table className="table compact-table">
+              <thead>
+                <tr>
+                  <th>Index</th>
+                  <th>Price</th>
+                  <th>Prob Up</th>
+                  <th>Pred 5D</th>
+                  <th>Conf</th>
+                  <th>Risk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topGainers.map((g) => (
+                  <tr key={g.symbol}>
+                    <td>{g.name}</td>
+                    <td>{g.price.toFixed(2)}</td>
+                    <td>{(g.prob_up * 100).toFixed(1)}%</td>
+                    <td>{typeof g.predicted_return_5d === "number" ? `${g.predicted_return_5d.toFixed(2)}%` : "--"}</td>
+                    <td>{typeof g.confidence === "number" ? `${(g.confidence * 100).toFixed(0)}%` : "--"}</td>
+                    <td>{g.risk_level}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <TrendChart data={snapshots} compact />
