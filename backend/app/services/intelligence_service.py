@@ -6,6 +6,9 @@ from typing import Any
 
 from pymongo.database import Database
 
+from app.services.market_pipeline import market_pipeline
+from app.services.news_service import news_service
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -116,6 +119,37 @@ class IntelligenceService:
         "France": "Europe",
         "India": "South Asia",
     }
+
+    def _stale_or_missing(self, db: Database, collection: str, time_field: str, min_rows: int, max_age_hours: int) -> bool:
+        now = _utc_now()
+        horizon = now - timedelta(hours=max_age_hours)
+        recent_count = db[collection].count_documents({time_field: {"$gte": horizon}})
+        return recent_count < min_rows
+
+    def _ensure_live_inputs(self, db: Database) -> dict[str, Any]:
+        status = {
+            "news_refreshed": False,
+            "markets_refreshed": False,
+            "news_reason": "",
+            "markets_reason": "",
+        }
+        try:
+            if self._stale_or_missing(db, "articles", "published_at", min_rows=24, max_age_hours=12):
+                result = news_service.ingest_with_stats(db)
+                status["news_refreshed"] = bool(result.get("inserted", 0) > 0)
+                status["news_reason"] = f"auto-refresh (inserted={int(result.get('inserted', 0))})"
+        except Exception as exc:
+            status["news_reason"] = f"auto-refresh failed: {exc.__class__.__name__}"
+
+        try:
+            if self._stale_or_missing(db, "market_snapshots", "as_of", min_rows=10, max_age_hours=12):
+                refreshed = market_pipeline.refresh(db)
+                status["markets_refreshed"] = refreshed > 0
+                status["markets_reason"] = f"auto-refresh (refreshed={int(refreshed)})"
+        except Exception as exc:
+            status["markets_reason"] = f"auto-refresh failed: {exc.__class__.__name__}"
+
+        return status
 
     def _latest_articles(self, db: Database, limit: int = 250) -> list[dict[str, Any]]:
         return list(db.articles.find({}, {"_id": 0}).sort("published_at", -1).limit(limit))
@@ -299,6 +333,7 @@ class IntelligenceService:
         }
 
     def dashboard(self, db: Database) -> dict[str, Any]:
+        freshness = self._ensure_live_inputs(db)
         articles = self._latest_articles(db, limit=320)
         markets = self._latest_markets(db)
         timeline = self._timeline(articles, limit=80)
@@ -490,6 +525,11 @@ class IntelligenceService:
                 "attention_mode": instability >= 0.65,
             },
             "upcoming_world_war_probability": round(upcoming_world_war_probability, 4),
+            "live_data_status": {
+                **freshness,
+                "article_count_used": len(articles),
+                "market_rows_used": len(markets),
+            },
         }
 
 

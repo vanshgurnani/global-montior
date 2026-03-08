@@ -3,7 +3,12 @@ from pymongo import ASCENDING, DESCENDING, MongoClient
 from app.core.config import settings
 
 
-mongo_client = MongoClient(settings.mongodb_url)
+mongo_client = MongoClient(
+    settings.mongodb_url,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+    socketTimeoutMS=5000,
+)
 
 
 def get_db():
@@ -16,11 +21,13 @@ def get_db_direct():
 
 def create_indexes() -> None:
     db = get_db_direct()
+    try:
+        db.articles.create_index([("url", ASCENDING)], unique=True)
+        db.articles.create_index([("published_at", DESCENDING)])
+        db.articles.create_index([("country", ASCENDING)])
 
-    db.articles.create_index([("url", ASCENDING)], unique=True)
-    db.articles.create_index([("published_at", DESCENDING)])
-    db.articles.create_index([("country", ASCENDING)])
-
-    db.market_snapshots.create_index([("symbol", ASCENDING)])
-    db.market_snapshots.create_index([("prob_up", DESCENDING)])
-    db.market_snapshots.create_index([("as_of", DESCENDING)])
+        db.market_snapshots.create_index([("symbol", ASCENDING)])
+        db.market_snapshots.create_index([("prob_up", DESCENDING)])
+        db.market_snapshots.create_index([("as_of", DESCENDING)])
+    except Exception as exc:
+        print(f"[db] index creation skipped: {exc.__class__.__name__}")

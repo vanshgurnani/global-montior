@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     stock_max_symbols: int = 30
     model_auto_train_on_refresh: bool = False
     model_train_retry_minutes: int = 60
+    use_transformer_sentiment: bool = False
 
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
