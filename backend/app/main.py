@@ -7,6 +7,11 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.database import create_indexes
 
+CODE_LEVEL_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -17,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=CODE_LEVEL_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
