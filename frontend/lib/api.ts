@@ -62,6 +62,11 @@ export type MapLayerPoint = {
   lon: number;
   intensity: number;
   source: string;
+  confidence?: "confirmed" | "emerging" | "low-confidence" | string;
+  status?: string;
+  currency?: string;
+  tension_risk?: number;
+  reason?: string;
 };
 
 export type MapLayerResponse = {
@@ -70,6 +75,17 @@ export type MapLayerResponse = {
   nuclear_sites: MapLayerPoint[];
   bunkers: MapLayerPoint[];
   chokepoints: MapLayerPoint[];
+  osint_overlays?: {
+    fire_hotspots?: MapLayerPoint[];
+    ship_density?: MapLayerPoint[];
+    flight_diversions?: MapLayerPoint[];
+  };
+  top_currency_risks?: Array<{
+    currency: string;
+    score: number;
+    count: number;
+    reason: string;
+  }>;
 };
 
 export type RefreshResult = {
@@ -113,6 +129,7 @@ export type ConflictTrackerItem = {
 
 export type IntelligenceDashboard = {
   generated_at: string;
+  upcoming_world_war_probability: number;
   global_conflict_tracker: ConflictTrackerItem[];
   real_time_sentiment: {
     overall_geopolitical_sentiment: number;
@@ -284,7 +301,13 @@ export const api = {
   getStocks: (limit: number = 25) => request<MarketSnapshot[]>(`/markets/stocks?limit=${limit}`),
   getCrypto: (limit: number = 25) => request<MarketSnapshot[]>(`/markets/crypto?limit=${limit}`),
   getLatestNews: () => request<NewsArticle[]>("/news/latest?limit=15"),
-  getMapLayers: () => request<MapLayerResponse>("/risk/map-layers"),
+  getMapLayers: (opts?: { include_osint?: boolean; overlays?: Array<"fire_hotspots" | "ship_density" | "flight_diversions"> }) => {
+    const params = new URLSearchParams();
+    if (opts?.include_osint) params.set("include_osint", "true");
+    if (opts?.overlays && opts.overlays.length > 0) params.set("overlays", opts.overlays.join(","));
+    const query = params.toString();
+    return request<MapLayerResponse>(`/risk/map-layers${query ? `?${query}` : ""}`);
+  },
   getLiveChannels: () => request<LiveChannelResponse>("/news/live-channels"),
   getIntelligenceDashboard: () => request<IntelligenceDashboard>("/intelligence/dashboard"),
   getCountryIntelligence: (country: string) => request<CountryIntelligence>(`/intelligence/country/${encodeURIComponent(country)}`),

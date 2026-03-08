@@ -201,6 +201,9 @@ export default function App() {
           <p className="subtitle">Real-time news, war signal detection, sentiment, and probabilistic market outlook.</p>
         </div>
         <div className="risk-actions">
+          <div className="risk-pill">
+            World War Probability: {((intel?.upcoming_world_war_probability ?? 0) * 100).toFixed(1)}%
+          </div>
           <div className="risk-pill">Global Risk: {risk?.risk_level ?? "Loading"}</div>
           <button
             type="button"
@@ -241,20 +244,6 @@ export default function App() {
 
         <section className="side-pane">
           <div className="card live-channel-card">
-            <h3>High-Risk Countries</h3>
-            <ul className="list">
-              {(risk?.high_risk_countries || []).map((c) => (
-                <li key={c.country}>
-                  <button type="button" className="country-link-btn" onClick={() => openHighRiskPopup(c)}>
-                    {c.country}
-                  </button>
-                  <span>{(c.avg_war_risk * 100).toFixed(1)}%</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="card pane-scroll">
             <h3>Live News Channels</h3>
             <div
               className="video-carousel"
@@ -339,6 +328,20 @@ export default function App() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="card pane-scroll">
+            <h3>High-Risk Countries</h3>
+            <ul className="list">
+              {(risk?.high_risk_countries || []).map((c) => (
+                <li key={c.country}>
+                  <button type="button" className="country-link-btn" onClick={() => openHighRiskPopup(c)}>
+                    {c.country}
+                  </button>
+                  <span>{(c.avg_war_risk * 100).toFixed(1)}%</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <TrendChart data={snapshots} compact />

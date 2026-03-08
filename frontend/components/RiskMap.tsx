@@ -21,7 +21,7 @@ function normalizedIntensity(value: unknown, fallback: number = 1): number {
   return Math.max(1, Math.min(4, n));
 }
 
-type LayerKey = "war" | "nuclear" | "bunkers" | "chokepoints";
+type LayerKey = "war" | "nuclear" | "bunkers" | "chokepoints" | "fire_hotspots" | "ship_density" | "flight_diversions";
 
 type MarkerPoint = {
   id: string;
@@ -31,6 +31,10 @@ type MarkerPoint = {
   source: string;
   layer: LayerKey;
   intensity: number;
+  currency?: string;
+  tensionRisk?: number;
+  reason?: string;
+  confidence?: string;
 };
 
 const LAYER_STYLES: Record<LayerKey, { label: string; color: string }> = {
@@ -38,6 +42,9 @@ const LAYER_STYLES: Record<LayerKey, { label: string; color: string }> = {
   nuclear: { label: "Nuclear Sites", color: "#f59e0b" },
   bunkers: { label: "Bunkers", color: "#3b82f6" },
   chokepoints: { label: "Chokepoints", color: "#22c55e" },
+  fire_hotspots: { label: "Fire Hotspots (OSINT)", color: "#f97316" },
+  ship_density: { label: "Ship Density (OSINT)", color: "#06b6d4" },
+  flight_diversions: { label: "Flight Diversions (OSINT)", color: "#a855f7" },
 };
 
 const STATIC_POINTS: MarkerPoint[] = [
@@ -64,10 +71,15 @@ export function RiskMap({ countries }: { countries: CountryRisk[] }) {
     nuclear: false,
     bunkers: false,
     chokepoints: false,
+    fire_hotspots: false,
+    ship_density: false,
+    flight_diversions: false,
   });
   const [selectedPoint, setSelectedPoint] = useState<MarkerPoint | null>(null);
   const [mapPoints, setMapPoints] = useState<MarkerPoint[]>(STATIC_POINTS);
   const [updatedAt, setUpdatedAt] = useState<string>("static fallback");
+  const [currencyRisks, setCurrencyRisks] = useState<Array<{ currency: string; score: number; reason: string }>>([]);
+  const [loadedOsintLayers, setLoadedOsintLayers] = useState<Partial<Record<LayerKey, boolean>>>({});
 
   const topLabel = useMemo(() => {
     if (!countries.length) return "No country risk data yet";
@@ -86,6 +98,75 @@ export function RiskMap({ countries }: { countries: CountryRisk[] }) {
         id: `${layer}-${p.id}`,
         name: p.name,
         coords: [p.lon, p.lat],
+        note:
+          `Live signal intensity: ${Number(p.intensity || 0).toFixed(2)}` +
+          `${p.confidence ? ` | confidence: ${p.confidence}` : ""}` +
+          `${p.status ? ` | status: ${p.status}` : ""}`,
+        source: p.source,
+        layer,
+        intensity: normalizedIntensity(p.intensity, 1),
+        currency: p.currency,
+        tensionRisk: typeof p.tension_risk === "number" ? p.tension_risk : undefined,
+        reason: p.reason,
+        confidence: p.confidence,
+      }));
+
+    const fallbackByLayer = (layer: LayerKey): MarkerPoint[] =>
+      STATIC_POINTS.filter((point) => point.layer === layer);
+
+    const loadBaseLayers = () =>
+      api
+        .getMapLayers()
+        .then((data) => {
+          const war = toMarkers(data.war_zones || [], "war");
+          const nuclear = toMarkers(data.nuclear_sites || [], "nuclear");
+          const bunkers = toMarkers(data.bunkers || [], "bunkers");
+          const chokepoints = toMarkers(data.chokepoints || [], "chokepoints");
+
+          // Keep each layer functional even when live feeds for that layer are sparse.
+          const merged = [
+            ...war,
+            ...(nuclear.length ? nuclear : fallbackByLayer("nuclear")),
+            ...(bunkers.length ? bunkers : fallbackByLayer("bunkers")),
+            ...(chokepoints.length ? chokepoints : fallbackByLayer("chokepoints")),
+          ];
+          if (merged.length > 0) {
+            setMapPoints((prev) => [
+              ...merged,
+              ...prev.filter((p) => p.layer === "fire_hotspots" || p.layer === "ship_density" || p.layer === "flight_diversions"),
+            ]);
+            setUpdatedAt(data.updated_at ? new Date(data.updated_at).toLocaleString() : "live");
+            setCurrencyRisks((data.top_currency_risks || []).map((x) => ({ currency: x.currency, score: x.score, reason: x.reason })));
+          }
+        })
+        .catch(() => {
+          // Keep static fallback markers when live map layer fetch fails.
+        });
+
+    loadBaseLayers();
+    const timer = window.setInterval(loadBaseLayers, 45000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const wantsOsint = ["fire_hotspots", "ship_density", "flight_diversions"].filter(
+      (layer) =>
+        enabledLayers[layer as LayerKey] &&
+        !loadedOsintLayers[layer as LayerKey]
+    ) as Array<"fire_hotspots" | "ship_density" | "flight_diversions">;
+    if (!wantsOsint.length) return;
+    const requested: Array<"fire_hotspots" | "ship_density" | "flight_diversions"> = [];
+    if (wantsOsint.includes("fire_hotspots")) requested.push("fire_hotspots");
+    if (wantsOsint.includes("ship_density")) requested.push("ship_density");
+    if (wantsOsint.includes("flight_diversions")) requested.push("flight_diversions");
+
+    const toMarkers = (points: MapLayerPoint[], layer: LayerKey): MarkerPoint[] =>
+      points.map((p) => ({
+        id: `${layer}-${p.id}`,
+        name: p.name,
+        coords: [p.lon, p.lat],
         note: `Live signal intensity: ${Number(p.intensity || 0).toFixed(2)}`,
         source: p.source,
         layer,
@@ -93,23 +174,40 @@ export function RiskMap({ countries }: { countries: CountryRisk[] }) {
       }));
 
     api
-      .getMapLayers()
+      .getMapLayers({ include_osint: true, overlays: requested })
       .then((data) => {
-        const merged = [
-          ...toMarkers(data.war_zones || [], "war"),
-          ...toMarkers(data.nuclear_sites || [], "nuclear"),
-          ...toMarkers(data.bunkers || [], "bunkers"),
-          ...toMarkers(data.chokepoints || [], "chokepoints"),
+        const overlays = data.osint_overlays || {};
+        const osintPoints: MarkerPoint[] = [
+          ...toMarkers(overlays.fire_hotspots || [], "fire_hotspots"),
+          ...toMarkers(overlays.ship_density || [], "ship_density"),
+          ...toMarkers(overlays.flight_diversions || [], "flight_diversions"),
         ];
-        if (merged.length > 0) {
-          setMapPoints(merged);
-          setUpdatedAt(data.updated_at ? new Date(data.updated_at).toLocaleString() : "live");
+        if (osintPoints.length > 0) {
+          setMapPoints((prev) => [
+            ...prev.filter(
+              (p) => p.layer !== "fire_hotspots" && p.layer !== "ship_density" && p.layer !== "flight_diversions"
+            ),
+            ...osintPoints,
+          ]);
         }
+        setLoadedOsintLayers((prev) => ({
+          ...prev,
+          ...(requested.includes("fire_hotspots") ? { fire_hotspots: true } : {}),
+          ...(requested.includes("ship_density") ? { ship_density: true } : {}),
+          ...(requested.includes("flight_diversions") ? { flight_diversions: true } : {}),
+        }));
       })
       .catch(() => {
-        // Keep static fallback markers when live map layer fetch fails.
+        // Optional OSINT overlays should never break the base map.
       });
-  }, []);
+  }, [
+    enabledLayers.fire_hotspots,
+    enabledLayers.ship_density,
+    enabledLayers.flight_diversions,
+    loadedOsintLayers.fire_hotspots,
+    loadedOsintLayers.ship_density,
+    loadedOsintLayers.flight_diversions,
+  ]);
 
   return (
     <div className="card map-card">
@@ -207,9 +305,18 @@ export function RiskMap({ countries }: { countries: CountryRisk[] }) {
           </span>
         ))}
       </div>
+      {currencyRisks.length > 0 ? (
+        <p className="map-point-info">
+          <strong>Top Currency Risk (Global):</strong>{" "}
+          {currencyRisks.slice(0, 3).map((x) => `${x.currency} ${(x.score * 100).toFixed(0)}%`).join(" | ")}
+        </p>
+      ) : null}
       {selectedPoint ? (
         <p className="map-point-info">
-          <strong>{selectedPoint.name}</strong>: {selectedPoint.note}.{" "}
+          <strong>{selectedPoint.name}</strong>: {selectedPoint.note}
+          {selectedPoint.currency ? ` | FX most affected: ${selectedPoint.currency}` : ""}
+          {typeof selectedPoint.tensionRisk === "number" ? ` | FX risk: ${(selectedPoint.tensionRisk * 100).toFixed(0)}%` : ""}
+          {selectedPoint.reason ? ` | ${selectedPoint.reason}` : ""}.{" "}
           <a href={selectedPoint.source} target="_blank" rel="noreferrer">
             Source
           </a>

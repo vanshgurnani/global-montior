@@ -436,6 +436,8 @@ class IntelligenceService:
 
         forecast = self._forecast(articles, risk_index)
         instability = risk_index["global_instability_score"]
+        top_conflict_prob = max((float(c["war_probability"]) for c in conflicts), default=0.2)
+        upcoming_world_war_probability = _clip(0.55 * top_conflict_prob + 0.45 * float(instability))
 
         return {
             "generated_at": _utc_now().isoformat(),
@@ -487,6 +489,7 @@ class IntelligenceService:
                 "global_instability_score": instability,
                 "attention_mode": instability >= 0.65,
             },
+            "upcoming_world_war_probability": round(upcoming_world_war_probability, 4),
         }
 
 
