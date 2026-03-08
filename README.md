@@ -1,92 +1,236 @@
 # Global Intelligence Monitor
 
-AI-powered geopolitical monitoring platform with conflict intelligence, real-time sentiment analytics, market impact modeling, and multi-panel operations dashboard.
+AI-powered geopolitical intelligence platform with real-time threat monitoring, conflict analytics, market risk modeling, and a multi-panel operations dashboard.
 
-## What It Does
-- Ingests live news from GDELT + NewsAPI + RSS
-- Runs sentiment and war-risk scoring per article
-- Detects and classifies high-impact events (war, sanctions, diplomacy, economic crisis, terrorism)
-- Builds a global risk index (war + energy + market)
-- Tracks conflict theaters (Russia-Ukraine, Israel-Hamas, Taiwan Strait)
-- Monitors chokepoints (Hormuz, Suez, Bab el-Mandeb, Taiwan Strait)
-- Surfaces military, nuclear, and civil unrest signals
-- Produces AI-style short intelligence briefings + event timeline
-- Predicts market direction and 5-day return probabilities
-- Tracks stocks and crypto datasets
-- Provides country drill-down intelligence snapshots
+## 1) System Overview
+The platform is split into two services:
+- `backend` (FastAPI + MongoDB): ingestion, scoring, intelligence synthesis, and API serving
+- `frontend` (React + Vite + TypeScript): intelligence operations dashboard UI
 
-## Tech Stack
-- Backend: FastAPI + MongoDB
-- Frontend: React + Vite + TypeScript
-- Data/Sources: yfinance, GDELT, NewsAPI, RSS, YouTube channels
+High-level flow:
+1. News is ingested from GDELT / NewsAPI / RSS.
+2. Each article is enriched with sentiment + keyword + war risk.
+3. Market snapshots are fetched from yfinance (indices/stocks/ETFs/crypto).
+4. Prediction engine produces market direction/return probabilities.
+5. Intelligence engine composes conflict, risk, forecast, and scenario views.
+6. Frontend renders map + feeds + risk cards + drilldowns in a multi-screen layout.
 
-## Project Structure
+## 2) Repository Structure
 ```text
 global-montior/
   backend/
     app/
-      api/routes/
+      api/
+        routes/
+          health.py
+          news.py
+          risk.py
+          markets.py
+          jobs.py
+          intelligence.py
       core/
+        config.py
+        database.py
       jobs/
+        scheduler.py
       schemas/
+        news.py
+        market.py
+        risk.py
       services/
+        news_service.py
+        sentiment_service.py
+        war_risk_service.py
+        stock_service.py
+        prediction_service.py
+        market_pipeline.py
+        risk_service.py
+        risk_map_service.py
+        youtube_service.py
+        intelligence_service.py
+      main.py
     requirements.txt
     Dockerfile
     .env
+
   frontend/
     src/
+      main.tsx
+      App.tsx
+      globals.css
     components/
+      RiskMap.tsx
+      TrendChart.tsx
     lib/
-    package.json
+      api.ts
     vite.config.ts
+    package.json
     Dockerfile
     .env
+
   docker-compose.yml
   README.md
 ```
 
-## Key Backend Services
-- `NewsService`: ingestion + normalization + scoring
-- `SentimentService`: sentiment model wrapper with fallback
-- `WarRiskService`: keyword/country extraction + risk scoring
-- `StockService`: pulls indices, equities, ETFs, crypto snapshots
-- `PredictionService`: market probability + return prediction engine
-- `IntelligenceService`: conflict tracker, timeline, alerts, forecasts, country dashboard
+## 3) Backend Architecture
 
-## Main API Endpoints
-- `GET /api/v1/health`
-- `GET /api/v1/news/latest?limit=20`
-- `GET /api/v1/news/stream?limit=15&interval_seconds=8`
-- `GET /api/v1/news/live-channels`
-- `GET /api/v1/risk/overview`
-- `GET /api/v1/risk/map-layers`
-- `GET /api/v1/markets/snapshots`
-- `GET /api/v1/markets/top-gainers?limit=5`
-- `GET /api/v1/markets/stocks?limit=25`
-- `GET /api/v1/markets/crypto?limit=25`
-- `GET /api/v1/intelligence/dashboard`
-- `GET /api/v1/intelligence/country/{country}`
-- `POST /api/v1/jobs/refresh`
+### 3.1 Core Services
+- `NewsService`
+  - Pulls articles from configured providers (`gdelt`, `newsapi`, `rss`)
+  - Normalizes title/source/url/published_at
+  - Enriches each article with sentiment, keyword score, war risk score, country, matched keywords
 
-## Environment Variables
-Set in `backend/.env`:
-- `MONGODB_URL`
-- `MONGODB_DB_NAME`
-- `NEWS_PROVIDER`
-- `NEWS_SOURCES`
-- `NEWS_API_KEY`
+- `SentimentService`
+  - Uses transformer sentiment model when available
+  - Falls back safely if model load fails
+
+- `WarRiskService`
+  - Geopolitical keyword scoring
+  - Country extraction from text
+  - Combined war-risk function from sentiment + keyword density
+
+- `StockService`
+  - Fetches market snapshots via yfinance
+  - Supports indices, stocks, ETFs, and crypto
+  - Computes momentum, volume spike, MA20/MA50, VIX proxy
+  - Classifies `asset_type` (`index`, `stock`, `etf`, `crypto`)
+  - Prioritizes key symbols (including major crypto) when symbol cap is enforced
+
+- `PredictionService`
+  - Produces probability of up/down move + predicted 5D return
+  - Uses trained model if available, fallback logic otherwise
+
+- `MarketPipeline`
+  - Joins macro sentiment/risk signals with market features
+  - Refreshes and stores `market_snapshots`
+
+- `RiskService`
+  - Global war/sentiment overview
+  - High-risk country aggregation
+
+- `RiskMapService`
+  - Returns map layers (war/nuclear/bunkers/chokepoints)
+
+- `IntelligenceService`
+  - Composes full intelligence dashboard payload:
+    - conflict tracker
+    - real-time sentiment
+    - breaking event detection
+    - global risk index
+    - market impact predictor
+    - commodity risk monitor
+    - trade route/chokepoint risk
+    - military/nuclear/civil unrest monitors
+    - AI news summaries
+    - event timeline
+    - country risk dashboard
+    - predictive geopolitics engine
+    - classification outputs
+    - 7D/30D forecast panel
+    - UI metadata
+
+### 3.2 API Routes
+Base prefix: `/api/v1`
+
+- Health
+  - `GET /health`
+
+- News
+  - `GET /news/latest?limit=20`
+  - `GET /news/stream?limit=15&interval_seconds=8` (SSE)
+  - `GET /news/live-channels`
+
+- Risk
+  - `GET /risk/overview`
+  - `GET /risk/map-layers`
+
+- Markets
+  - `GET /markets/snapshots`
+  - `GET /markets/top-gainers?limit=5`
+  - `GET /markets/stocks?limit=25`
+  - `GET /markets/crypto?limit=25`
+
+- Intelligence
+  - `GET /intelligence/dashboard`
+  - `GET /intelligence/country/{country}`
+
+- Jobs
+  - `POST /jobs/run-ingestion`
+  - `POST /jobs/run-market-refresh`
+  - `POST /jobs/refresh`
+  - `POST /jobs/train-model`
+
+### 3.3 Storage Model (MongoDB)
+- `articles`
+  - title, source, url, summary, country, published_at
+  - sentiment_score, keyword_score, war_risk_score, matched_keywords
+
+- `market_snapshots`
+  - symbol, name, asset_type, price
+  - momentum_7d, volume_spike_pct, ma20, ma50, vix_proxy
+  - prob_up, prob_down, predicted_return_5d, confidence, risk_level, model_used, as_of
+
+### 3.4 Background/Scheduling
+- APScheduler job runner available in backend
+- Supports periodic ingestion + market refresh flow
+
+## 4) Frontend Architecture
+
+### 4.1 App Composition
+- `src/main.tsx`: app bootstrap
+- `src/App.tsx`: orchestration + multi-panel dashboard
+- `components/RiskMap.tsx`: global map + layer controls
+- `components/TrendChart.tsx`: trend/market chart
+- `lib/api.ts`: typed API client
+
+### 4.2 Major Dashboard Panels
+- Global risk + refresh controls
+- High-risk countries with click-to-open threat popup
+- Live news stream (SSE)
+- Live news channels carousel
+  - manual navigation
+  - channel chips
+  - optional auto-switch toggle
+- Top predicted gainers table
+- Conflict tracker
+- Risk index block
+- Market impact predictor
+- Stocks & crypto data tables
+- Commodity + chokepoint monitor
+- Military / nuclear / civil unrest feeds
+- AI summaries + timeline
+- Country risk dashboard (drilldown)
+- Predictive geopolitics + forecast
+- Scenario simulation cards
+
+### 4.3 High-Risk Country Popup
+Clicking a country in "High-Risk Countries" opens a modal showing:
+- risk percentage at top
+- future market risk estimate
+- sentiment
+- military activity signals
+- top potential threat headlines
+
+## 5) Configuration
+
+### 5.1 Backend (`backend/.env`)
+Common keys:
+- `MONGODB_URL`, `MONGODB_DB_NAME`
+- `NEWS_PROVIDER`, `NEWS_SOURCES`, `NEWS_API_KEY`, `RSS_FEEDS`
 - `YOUTUBE_API_KEY`
 - `CORS_ORIGINS=http://localhost:3000,http://localhost:5173`
-- `STOCK_SYMBOLS=DEFAULT` (supports custom CSV and crypto symbols like `BTC-USD`)
+- `STOCK_SYMBOLS=DEFAULT`
 - `STOCK_HISTORY_PERIOD=6mo`
 - `STOCK_MIN_POINTS=55`
 - `STOCK_MAX_SYMBOLS=30`
 
-Set in `frontend/.env`:
+### 5.2 Frontend (`frontend/.env`)
 - `VITE_API_BASE=http://localhost:8000/api/v1`
 
-## Run Locally
-### 1) Backend
+## 6) Running the Project
+
+### Local
+Backend:
 ```bash
 cd backend
 python3 -m venv .venv
@@ -95,17 +239,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2) Frontend
+Frontend:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### 3) MongoDB
-Run MongoDB locally (or use Docker) and ensure backend env vars point to it.
-
-## Run with Docker
+### Docker
 ```bash
 docker compose up --build
 ```
@@ -113,12 +254,12 @@ docker compose up --build
 - Backend: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
-## Dashboard Notes
-- Live News Channels carousel now supports:
-  - auto-switch every 12 seconds
-  - hover pause
-  - manual channel selection
-  - `Auto switch ON/OFF` toggle
+## 7) Current Capability Snapshot
+- End-to-end ingestion -> scoring -> risk -> forecasting pipeline
+- Real-time dashboard with intelligence-focused dark UI
+- Country-level threat drilldown popup
+- Stocks + crypto exposure integrated into risk workflow
+- Scenario cards for quick strategic what-if monitoring
 
-## Disclaimer
+## 8) Disclaimer
 Not financial advice.

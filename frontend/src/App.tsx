@@ -4,6 +4,7 @@ import { RiskMap } from "@/components/RiskMap";
 import { TrendChart } from "@/components/TrendChart";
 import {
   api,
+  type CountryRisk,
   type CountryIntelligence,
   type IntelligenceDashboard,
   type LiveChannel,
@@ -32,6 +33,9 @@ export default function App() {
   const [intel, setIntel] = useState<IntelligenceDashboard | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [countryIntel, setCountryIntel] = useState<CountryIntelligence | null>(null);
+  const [popupCountry, setPopupCountry] = useState<CountryRisk | null>(null);
+  const [popupIntel, setPopupIntel] = useState<CountryIntelligence | null>(null);
+  const [popupLoading, setPopupLoading] = useState(false);
   const channelRailRef = useRef<HTMLDivElement | null>(null);
   const channelItemRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
@@ -144,6 +148,27 @@ export default function App() {
 
   const topGainers = [...snapshots].sort((a, b) => b.prob_up - a.prob_up).slice(0, 5);
   const currentChannel = liveChannels[activeChannelIndex] || liveChannels[0] || null;
+  const baseInstability = intel?.global_risk_index.global_instability_score ?? 0;
+  const scenarioCards = [
+    {
+      name: "De-escalation Window",
+      description: "Ceasefire momentum and lower sanctions pressure.",
+      instability: Math.max(0, baseInstability - 0.12),
+      marketBias: "Risk-on",
+    },
+    {
+      name: "Status Quo Tension",
+      description: "Current conflict intensity persists with intermittent shocks.",
+      instability: baseInstability,
+      marketBias: "Range-bound",
+    },
+    {
+      name: "Escalation Shock",
+      description: "Military escalation with energy-route disruption risk.",
+      instability: Math.min(1, baseInstability + 0.18),
+      marketBias: "Risk-off",
+    },
+  ];
   const slideChannels = (dir: "left" | "right") => {
     const rail = channelRailRef.current;
     if (!rail) return;
@@ -157,6 +182,16 @@ export default function App() {
     }
   };
 
+  const openHighRiskPopup = (country: CountryRisk) => {
+    setPopupCountry(country);
+    setPopupLoading(true);
+    api
+      .getCountryIntelligence(country.country)
+      .then(setPopupIntel)
+      .catch(() => setPopupIntel(null))
+      .finally(() => setPopupLoading(false));
+  };
+
   return (
     <main className="container dashboard-screen">
       <header className="hero">
@@ -164,11 +199,20 @@ export default function App() {
           <p className="eyebrow">Global Intelligence Monitor</p>
           <h1>AI Geopolitical & Market Intelligence</h1>
           <p className="subtitle">Real-time news, war signal detection, sentiment, and probabilistic market outlook.</p>
-          <button type="button" onClick={refreshData} disabled={refreshing} style={{ marginTop: "12px" }}>
-            {refreshing ? "Refreshing..." : "Refresh Data"}
+        </div>
+        <div className="risk-actions">
+          <div className="risk-pill">Global Risk: {risk?.risk_level ?? "Loading"}</div>
+          <button
+            type="button"
+            className="refresh-icon-btn"
+            onClick={refreshData}
+            disabled={refreshing}
+            title={refreshing ? "Refreshing..." : "Refresh dashboard"}
+            aria-label={refreshing ? "Refreshing dashboard" : "Refresh dashboard"}
+          >
+            ↻
           </button>
         </div>
-        <div className="risk-pill">Global Risk: {risk?.risk_level ?? "Loading"}</div>
       </header>
 
       {loading ? <p className="status-line">Loading dashboard...</p> : null}
@@ -201,7 +245,9 @@ export default function App() {
             <ul className="list">
               {(risk?.high_risk_countries || []).map((c) => (
                 <li key={c.country}>
-                  <span>{c.country}</span>
+                  <button type="button" className="country-link-btn" onClick={() => openHighRiskPopup(c)}>
+                    {c.country}
+                  </button>
                   <span>{(c.avg_war_risk * 100).toFixed(1)}%</span>
                 </li>
               ))}
@@ -556,7 +602,54 @@ export default function App() {
             ))}
           </ul>
         </div>
+
+        <div className="card pane-scroll">
+          <h3>Scenario Simulation Cards</h3>
+          <div className="scenario-grid">
+            {scenarioCards.map((scenario) => (
+              <div key={scenario.name} className="scenario-card">
+                <h4>{scenario.name}</h4>
+                <p>{scenario.description}</p>
+                <p>Projected Instability: {(scenario.instability * 100).toFixed(1)}%</p>
+                <p>Expected Market Regime: {scenario.marketBias}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
+
+      {popupCountry ? (
+        <div className="modal-overlay" role="presentation" onClick={() => setPopupCountry(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>{popupCountry.country} Threat Outlook</h3>
+              <button type="button" className="video-nav" onClick={() => setPopupCountry(null)} aria-label="Close">
+                x
+              </button>
+            </div>
+            <div className="popup-risk-percent">{(popupCountry.avg_war_risk * 100).toFixed(1)}% Risk</div>
+            {popupLoading ? (
+              <p className="status-line">Loading country outlook...</p>
+            ) : popupIntel?.snapshot ? (
+              <div className="country-card">
+                <p>Future Market Risk: {(popupIntel.snapshot.predicted_market_impact * 100).toFixed(1)}%</p>
+                <p>Sentiment: {popupIntel.snapshot.sentiment.toFixed(2)}</p>
+                <p>Military Activity Signals: {popupIntel.snapshot.military_activity}</p>
+                <p>Potential Threat Headlines:</p>
+                <ul className="list">
+                  {popupIntel.snapshot.news.map((headline) => (
+                    <li key={headline}>
+                      <span>{headline}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="status-line">No country intelligence snapshot available.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

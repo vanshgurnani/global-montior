@@ -22,7 +22,16 @@ def top_gainers(limit: int = 5, db: Database = Depends(get_db)):
 @router.get("/stocks", response_model=list[MarketSnapshotOut])
 def stocks(limit: int = 25, db: Database = Depends(get_db)):
     cursor = (
-        db.market_snapshots.find({"asset_type": {"$in": ["stock", "index", "etf"]}}, {"_id": 0})
+        db.market_snapshots.find(
+            {
+                "$or": [
+                    {"asset_type": {"$in": ["stock", "index", "etf"]}},
+                    {"asset_type": {"$exists": False}, "symbol": {"$not": {"$regex": "-USD$"}}},
+                    {"asset_type": None, "symbol": {"$not": {"$regex": "-USD$"}}},
+                ]
+            },
+            {"_id": 0},
+        )
         .sort("prob_up", -1)
         .limit(max(1, min(limit, 100)))
     )

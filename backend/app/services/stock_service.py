@@ -89,6 +89,23 @@ ETF_SYMBOLS = {
     "INDA",
 }
 
+PRIORITY_SYMBOLS = [
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "BNB-USD",
+    "XRP-USD",
+    "DOGE-USD",
+    "^GSPC",
+    "^IXIC",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "META",
+    "TSLA",
+]
+
 
 class StockService:
     def _asset_type(self, symbol: str) -> str:
@@ -116,6 +133,13 @@ class StockService:
 
         return {symbol: DEFAULT_SYMBOL_MAP.get(symbol, symbol) for symbol in symbols}
 
+    def _selected_symbols(self, symbols: dict[str, str], max_symbols: int) -> list[tuple[str, str]]:
+        # Keep important crypto + market symbols always visible, then fill remaining slots.
+        prioritized: list[str] = [s for s in PRIORITY_SYMBOLS if s in symbols]
+        ordered = prioritized + [s for s in symbols.keys() if s not in prioritized]
+        selected = ordered[:max_symbols]
+        return [(symbol, symbols[symbol]) for symbol in selected]
+
     def fetch_vix_proxy(self) -> float:
         try:
             vix = yf.Ticker("^VIX")
@@ -134,7 +158,7 @@ class StockService:
         period = settings.stock_history_period or "6mo"
         max_symbols = max(5, int(settings.stock_max_symbols))
 
-        for symbol, name in list(symbols.items())[:max_symbols]:
+        for symbol, name in self._selected_symbols(symbols, max_symbols):
             try:
                 ticker = yf.Ticker(symbol)
                 hist = ticker.history(period=period)
