@@ -10,6 +10,7 @@ from app.core.database import create_indexes
 CODE_LEVEL_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
+    "https://global-montior.vercel.app"
 ]
 
 
