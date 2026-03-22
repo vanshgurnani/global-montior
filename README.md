@@ -100,6 +100,11 @@ global-montior/
   - Produces probability of up/down move + predicted 5D return
   - Uses trained model if available, fallback logic otherwise
 
+- `ReinforcementLearningService`
+  - Applies an RL-style market policy over the same feature stream
+  - Emits `buy` / `hold` / `sell` actions for each market snapshot
+  - Lives beside `PredictionService`, not in `main.py`
+
 - `MarketPipeline`
   - Joins macro sentiment/risk signals with market features
   - Refreshes and stores `market_snapshots`
@@ -155,12 +160,18 @@ Base prefix: `/api/v1`
   - `GET /intelligence/country/{country}`
 
 - Jobs
-  - `POST /jobs/run-ingestion`
-  - `POST /jobs/run-market-refresh`
-  - `POST /jobs/refresh`
-  - `POST /jobs/train-model`
+  - `POST /jobs/refresh` – Single job: news + markets + ground truth + optional model training (wired to frontend refresh button)
 
-### 3.3 Storage Model (MongoDB)
+### 3.3 Ground Truth Datasets (Train/Validate)
+The system can ingest ground truth data for model training and validation instead of relying only on news sentiment and keyword risk:
+
+- **CBOE VIX** – via yfinance (`^VIX`), stored in `ground_truth_vix` for backtesting
+- **World Bank** – GDP growth, inflation, debt (% GDP) – free API, no key
+- **ACLED** – conflict event data – requires free registration at [ACLED](https://acleddata.com/register/)
+
+Set `GROUND_TRUTH_ENABLED=true`, and optionally `ACLED_API_KEY` and `ACLED_EMAIL` in `.env`. Ground truth is included in `POST /jobs/refresh` (frontend refresh button) and in the scheduler cycle.
+
+### 3.4 Storage Model (MongoDB)
 - `articles`
   - title, source, url, summary, country, published_at
   - sentiment_score, keyword_score, war_risk_score, matched_keywords
@@ -168,9 +179,20 @@ Base prefix: `/api/v1`
 - `market_snapshots`
   - symbol, name, asset_type, price
   - momentum_7d, volume_spike_pct, ma20, ma50, vix_proxy
-  - prob_up, prob_down, predicted_return_5d, confidence, risk_level, model_used, as_of
+  - prob_up, prob_down, predicted_return_5d, confidence, risk_level, model_used
+  - rl_action, rl_confidence, rl_state, rl_policy, as_of
 
-### 3.4 Background/Scheduling
+- `ground_truth_vix` – CBOE VIX history (date, close, source)
+- `ground_truth_economic` – World Bank indicators (country_iso, year, indicator, value)
+- `ground_truth_conflicts` – ACLED events (event_date, country, event_type, fatalities)
+
+### 3.5 Time-Series Intelligence
+The prediction engine uses:
+- **Rolling sentiment windows** (3d, 7d, 14d) with lag weighting (14d higher – markets react with delay)
+- **Lagged momentum features** (1d, 3d ago) for overreaction cycles
+- **XGBoost** as the main model (no extra deps, low load)
+
+### 3.6 Background/Scheduling
 - APScheduler job runner available in backend
 - Supports periodic ingestion + market refresh flow
 

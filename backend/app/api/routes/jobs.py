@@ -3,6 +3,7 @@ from pymongo.database import Database
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.services.ground_truth_service import ground_truth_service
 from app.services.market_pipeline import market_pipeline
 from app.services.news_service import news_service
 from app.services.prediction_service import prediction_service
@@ -10,26 +11,9 @@ from app.services.prediction_service import prediction_service
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
-@router.post("/run-ingestion")
-def run_ingestion(db: Database = Depends(get_db)):
-    try:
-        return {"ok": True, "news": news_service.ingest_with_stats(db)}
-    except Exception as exc:
-        return {"ok": False, "errors": [f"ingestion_failed: {exc}"]}
-
-
-@router.post("/run-market-refresh")
-def run_market_refresh(db: Database = Depends(get_db)):
-    try:
-        count = market_pipeline.refresh(db)
-        return {"ok": True, "markets": {"refreshed": count}}
-    except Exception as exc:
-        return {"ok": False, "errors": [f"market_refresh_failed: {exc}"]}
-
-
 @router.post("/refresh")
 def refresh_all(db: Database = Depends(get_db)):
-    result = {"ok": True, "training": None, "news": None, "markets": None, "errors": []}
+    result = {"ok": True, "training": None, "news": None, "markets": None, "ground_truth": None, "errors": []}
 
     if settings.model_auto_train_on_refresh:
         try:
@@ -53,9 +37,11 @@ def refresh_all(db: Database = Depends(get_db)):
         result["ok"] = False
         result["errors"].append(f"market_refresh_failed: {exc}")
 
+    if settings.ground_truth_enabled:
+        try:
+            result["ground_truth"] = ground_truth_service.ingest_all(db)
+        except Exception as exc:
+            result["ok"] = False
+            result["errors"].append(f"ground_truth_failed: {exc}")
+
     return result
-
-
-@router.post("/train-model")
-def train_model():
-    return prediction_service.train_if_needed(force=True)

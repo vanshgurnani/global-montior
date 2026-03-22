@@ -6,8 +6,10 @@ import xml.etree.ElementTree as ET
 
 import requests
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
+from app.services.event_classification_service import event_classification_service
 from app.services.sentiment_service import sentiment_service
 from app.services.war_risk_service import RISK_KEYWORDS, war_risk_service
 
@@ -224,25 +226,22 @@ class NewsService:
         source_counts = {}
 
         for item in incoming:
-            if not item.get("url"):
+            url = (item.get("url") or "").strip()
+            if not url:
                 invalid += 1
-                continue
-
-            existing = db.articles.find_one({"url": item["url"]}, {"_id": 1})
-            if existing:
-                duplicates += 1
                 continue
 
             text = f"{item.get('title', '')} {item.get('summary', '')}"
             sentiment_score = sentiment_service.analyze(text)
             keyword_score, hits = war_risk_service.keyword_score(text)
+            event_cls = event_classification_service.classify(text)
             war_risk_score = war_risk_service.combined_war_risk(sentiment_score, keyword_score)
             country = war_risk_service.country_from_text(text)
 
             doc = {
                 "title": item.get("title", ""),
                 "source": item.get("source", "unknown"),
-                "url": item.get("url", ""),
+                "url": url,
                 "summary": item.get("summary", ""),
                 "country": country,
                 "published_at": self._parse_published_at(item.get("published_at")),
@@ -250,13 +249,25 @@ class NewsService:
                 "sentiment_score": float(sentiment_score),
                 "keyword_score": float(keyword_score),
                 "war_risk_score": float(war_risk_score),
+                "event_type": event_cls.event_type,
+                "event_severity": event_cls.severity,
+                "event_severity_score": float(event_cls.severity_score),
+                "event_confidence": float(event_cls.confidence),
+                "event_rationale": event_cls.rationale,
                 "matched_keywords": hits,
             }
 
-            db.articles.insert_one(doc)
-            inserted += 1
-            source_type = (item.get("_source_type") or "unknown").lower()
-            source_counts[source_type] = int(source_counts.get(source_type, 0)) + 1
+            # Atomic insert: avoids race between "find_one" and "insert_one" across workers.
+            try:
+                result = db.articles.update_one({"url": url}, {"$setOnInsert": doc}, upsert=True)
+                if result.upserted_id is not None:
+                    inserted += 1
+                    source_type = (item.get("_source_type") or "unknown").lower()
+                    source_counts[source_type] = int(source_counts.get(source_type, 0)) + 1
+                else:
+                    duplicates += 1
+            except DuplicateKeyError:
+                duplicates += 1
 
         return {
             "provider": settings.news_provider.lower(),

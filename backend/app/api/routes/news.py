@@ -33,6 +33,9 @@ def _serialize_article(doc: dict[str, Any]) -> dict[str, Any]:
         "sentiment_score": float(doc.get("sentiment_score", 0.0)),
         "keyword_score": float(doc.get("keyword_score", 0.0)),
         "war_risk_score": float(doc.get("war_risk_score", 0.0)),
+        "event_type": doc.get("event_type"),
+        "event_severity": doc.get("event_severity"),
+        "event_confidence": (float(doc["event_confidence"]) if doc.get("event_confidence") is not None else None),
     }
 
 

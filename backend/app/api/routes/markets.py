@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends
+from fastapi import Query
 from pymongo.database import Database
 
 from app.core.database import get_db
-from app.schemas.market import MarketSnapshotOut
+from app.schemas.market import MarketCandleOut, MarketSnapshotOut
+from app.services.stock_service import stock_service
 
 router = APIRouter(prefix="/markets", tags=["Markets"])
 
@@ -49,3 +51,13 @@ def crypto(limit: int = 25, db: Database = Depends(get_db)):
         .limit(max(1, min(limit, 100)))
     )
     return list(cursor)
+
+
+@router.get("/candles", response_model=list[MarketCandleOut])
+def candles(
+    symbol: str = Query(..., min_length=1),
+    period: str = Query(default="5d"),
+    interval: str = Query(default="15m"),
+    limit: int = Query(default=80, ge=10, le=200),
+):
+    return stock_service.fetch_candles(symbol=symbol, period=period, interval=interval, limit=limit)

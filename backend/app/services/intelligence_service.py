@@ -8,6 +8,7 @@ from pymongo.database import Database
 
 from app.services.market_pipeline import market_pipeline
 from app.services.news_service import news_service
+from app.services.event_classification_service import EventClassificationService
 
 
 def _utc_now() -> datetime:
@@ -164,6 +165,17 @@ class IntelligenceService:
 
     def _classify_event(self, article: dict[str, Any]) -> dict[str, Any]:
         text = self._text(article)
+        stored_type = str(article.get("event_type") or "").strip()
+        stored_sev = article.get("event_severity_score")
+        if stored_type:
+            category = EventClassificationService.LABELS.get(stored_type, stored_type.replace("_", " "))
+            severity = _clip(float(stored_sev)) if stored_sev is not None else _clip(float(article.get("war_risk_score", 0.0)))
+            return {
+                "category": category,
+                "severity": round(float(severity), 4),
+                "high_impact": any(word in text for word in self.HIGH_IMPACT_WORDS) or float(severity) >= 0.7,
+            }
+
         category = "diplomacy"
         best_hits = 0
         for label, words in self.CLASSIFIER_RULES:
@@ -249,23 +261,47 @@ class IntelligenceService:
         }
 
     def _market_impact(self, markets: list[dict[str, Any]], risk_index: dict[str, Any]) -> list[dict[str, Any]]:
-        name_map = {
-            "S&P 500": ["S&P 500", "^GSPC", "SP500"],
-            "Nasdaq": ["NASDAQ", "^IXIC"],
-            "Oil": ["Oil", "Crude", "USO", "CL=F"],
-            "Gold": ["Gold", "GLD", "XAUUSD", "GC=F"],
-            "Bitcoin": ["Bitcoin", "BTC", "BTC-USD"],
-            "Defense": ["Lockheed", "RTX", "NOC", "Defense"],
+        # Prefer deterministic symbol selection so "Gold" and "Defense" don't flip between
+        # multiple matching rows based on sort order.
+        asset_specs: dict[str, dict[str, list[str]]] = {
+            "S&P 500": {"preferred_symbols": ["^GSPC", "SPY"], "keys": ["s&p 500", "spdr s&p 500", "^gspc", "spy"]},
+            "Nasdaq": {"preferred_symbols": ["^IXIC", "QQQ"], "keys": ["nasdaq", "^ixic", "qqq"]},
+            "Oil": {"preferred_symbols": ["CL=F", "USO"], "keys": ["cl=f", "crude", "united states oil", "uso"]},
+            "Gold": {"preferred_symbols": ["GLD", "GC=F"], "keys": ["gld", "gc=f", "spdr gold", "gold futures"]},
+            "Bitcoin": {"preferred_symbols": ["BTC-USD"], "keys": ["btc-usd", "bitcoin"]},
+            "Defense": {"preferred_symbols": ["ITA", "RTX", "LMT", "NOC"], "keys": ["ita", "aerospace", "defense", "lockheed", "raytheon", "northrop"]},
         }
 
+        by_symbol: dict[str, dict[str, Any]] = {}
+        for row in markets:
+            sym = str(row.get("symbol", "")).strip()
+            if sym:
+                by_symbol[sym.upper()] = row
+
         results: list[dict[str, Any]] = []
-        for asset, keys in name_map.items():
+        for asset, spec in asset_specs.items():
             found = None
-            for row in markets:
-                text = f"{row.get('name', '')} {row.get('symbol', '')}".lower()
-                if any(k.lower() in text for k in keys):
-                    found = row
+            for sym in spec.get("preferred_symbols", []):
+                found = by_symbol.get(sym.upper())
+                if found:
                     break
+
+            if not found:
+                best_row = None
+                best_score = 0.0
+                keys = [k.lower() for k in spec.get("keys", [])]
+                for row in markets:
+                    name = str(row.get("name", "")).lower()
+                    symbol = str(row.get("symbol", "")).lower()
+                    text = f"{name} {symbol}".strip()
+                    hits = sum(1 for k in keys if k and k in text)
+                    if hits <= 0:
+                        continue
+                    score = hits + (0.5 if symbol in keys else 0.0)
+                    if score > best_score:
+                        best_score = score
+                        best_row = row
+                found = best_row
             if found:
                 down_prob = float(found.get("prob_down", 0.5))
                 ret = float(found.get("predicted_return_5d", 0.0) or 0.0)
@@ -501,10 +537,6 @@ class IntelligenceService:
             },
             "civil_unrest_tracker": unrest[:20],
             "live_news_wall": [
-                {"name": "Reuters", "watchUrl": "https://www.youtube.com/@Reuters/live"},
-                {"name": "CNN", "watchUrl": "https://www.youtube.com/@CNN/live"},
-                {"name": "DW News", "watchUrl": "https://www.youtube.com/@DWNews/live"},
-                {"name": "France 24", "watchUrl": "https://www.youtube.com/@FRANCE24/live"},
                 {"name": "TRT World", "watchUrl": "https://www.youtube.com/@TRTWorld/live"},
             ],
             "ai_news_summaries": summaries[:24],

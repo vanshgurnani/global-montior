@@ -25,9 +25,15 @@ def create_indexes() -> None:
         db.articles.create_index([("url", ASCENDING)], unique=True)
         db.articles.create_index([("published_at", DESCENDING)])
         db.articles.create_index([("country", ASCENDING)])
+        db.articles.create_index([("event_type", ASCENDING)])
 
         db.market_snapshots.create_index([("symbol", ASCENDING)])
         db.market_snapshots.create_index([("prob_up", DESCENDING)])
         db.market_snapshots.create_index([("as_of", DESCENDING)])
+
+        db.ground_truth_vix.create_index([("date", ASCENDING)])
+        db.ground_truth_economic.create_index([("year", ASCENDING), ("country_iso", ASCENDING), ("indicator", ASCENDING)])
+        db.ground_truth_conflicts.create_index([("event_date", ASCENDING)])
+        db.ground_truth_conflicts.create_index([("country", ASCENDING)])
     except Exception as exc:
         print(f"[db] index creation skipped: {exc.__class__.__name__}")

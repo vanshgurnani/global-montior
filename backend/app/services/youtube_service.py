@@ -6,25 +6,9 @@ from app.core.config import settings
 
 DEFAULT_CHANNELS = [
     {
-        "name": "DW News",
-        "channel_id": "UCknLrEdhRCp1aegoMqRaCZg",
-        "watch_url": "https://www.youtube.com/@DWNews/live",
-    },
-    {
-        "name": "France 24",
-        "channel_id": "UCQfwfsi5VrQ8yKZ-UWmAEFg",
-        "watch_url": "https://www.youtube.com/@FRANCE24/live",
-    },
-    {
         "name": "TRT World",
         "channel_id": "UC7fWeaHhqgM4Ry-RMpM2YYw",
         "watch_url": "https://www.youtube.com/@TRTWorld/live",
-    },
-    {
-        "name": "Republic Bharat",
-        "channel_id": "UC7wXt18fO9iAexX9jqtFj9A",
-        "watch_url": "https://www.youtube.com/@RepublicBharat/live",
-        "fallback_video": "RlRtHNTxt3M",
     }
 ]
 
