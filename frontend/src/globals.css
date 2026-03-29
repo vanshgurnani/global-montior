@@ -319,14 +319,22 @@ h1 {
   color: #fca5a5;
 }
 
+.text-green {
+  color: var(--accent);
+}
+.text-red {
+  color: var(--danger);
+}
+
 .screen-grid {
   flex: 0 0 auto;
-  height: 74vh;
+  height: auto;
   min-height: 0;
   display: grid;
   grid-template-columns: 2.1fr 0.9fr;
-  grid-template-rows: 58% 42%;
+  grid-template-rows: auto auto;
   gap: 7px;
+  align-items: start;
 }
 
 .intel-grid {
@@ -448,18 +456,27 @@ h1 {
 
 .side-pane {
   grid-column: 2;
-  grid-row: 1;
-  display: block;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   min-height: 0;
+  overflow: auto;
 }
 
 .bottom-pane {
-  grid-column: 1 / span 2;
+  grid-column: 1;
   grid-row: 2;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(260px, auto);
   gap: 7px;
   min-height: 0;
+  align-items: start;
+}
+
+.map-card {
+  min-height: 440px;
 }
 
 .pane-scroll {
@@ -470,6 +487,115 @@ h1 {
 .trend-card {
   min-height: 0;
   overflow: hidden;
+}
+
+.candlestick-card {
+  min-height: 360px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.candlestick-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candlestick-toolbar {
+  margin: 8px 0 10px;
+}
+
+.candlestick-toolbar label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.candlestick-toolbar select {
+  background: var(--panel);
+  color: var(--panel-text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.candlestick-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: #d7ffe0;
+  font-size: 12px;
+}
+
+.candlestick-stats span {
+  background: rgba(50, 255, 106, 0.08);
+  border: 1px solid rgba(50, 255, 106, 0.18);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.candlestick-wrap {
+  width: 100%;
+  min-height: 320px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(12, 34, 20, 0.98), rgba(3, 8, 5, 0.98)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(127, 167, 138, 0.05) 0,
+      rgba(127, 167, 138, 0.05) 1px,
+      transparent 1px,
+      transparent 48px
+    );
+}
+
+.candlestick-svg {
+  width: 100%;
+  height: 320px;
+  display: block;
+}
+
+.axis-line {
+  stroke: rgba(160, 220, 178, 0.45);
+  stroke-width: 1.1;
+}
+
+.grid-line {
+  stroke: rgba(160, 220, 178, 0.18);
+  stroke-width: 1;
+}
+
+.axis-text {
+  fill: #a5d7b3;
+  font-size: 11px;
+}
+
+.wick-up {
+  stroke: #32ff6a;
+  stroke-width: 2;
+}
+
+.wick-down {
+  stroke: #ff5c7a;
+  stroke-width: 2;
+}
+
+.candle-up {
+  fill: #32ff6a;
+  stroke: #b4ffc8;
+  stroke-width: 1;
+}
+
+.candle-down {
+  fill: #ff5c7a;
+  stroke: #ffd0da;
+  stroke-width: 1;
 }
 
 .video-switch {
@@ -597,8 +723,8 @@ h1 {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 450px;
+  flex: 0 0 auto;
+  min-height: 320px;
   gap: 4px;
 }
 

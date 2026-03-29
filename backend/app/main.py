@@ -1,3 +1,4 @@
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.core.config import settings
 from app.core.database import create_indexes
+from app.jobs.scheduler import start_scheduler
 
 CODE_LEVEL_CORS_ORIGINS = [
     "http://localhost:3000",
@@ -17,6 +19,9 @@ CODE_LEVEL_CORS_ORIGINS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_indexes()
+    # Start scheduler in background thread so initial ingestion doesn't block app startup
+    thread = threading.Thread(target=start_scheduler, daemon=True)
+    thread.start()
     yield
 
 

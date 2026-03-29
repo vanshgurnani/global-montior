@@ -21,7 +21,23 @@ class MarketSnapshotOut(BaseModel):
     predicted_return_5d: Optional[float] = None
     confidence: Optional[float] = None
     model_used: Optional[str] = None
+    rl_action: Optional[str] = None
+    rl_confidence: Optional[float] = None
+    rl_state: Optional[str] = None
+    rl_policy: Optional[str] = None
     as_of: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MarketCandleOut(BaseModel):
+    time: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: Optional[float] = None
 
     class Config:
         from_attributes = True

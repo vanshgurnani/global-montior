@@ -31,6 +31,15 @@ export type MarketSnapshot = {
   as_of: string;
 };
 
+export type MarketCandle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number | null;
+};
+
 export type NewsArticle = {
   title: string;
   source: string;
@@ -40,6 +49,9 @@ export type NewsArticle = {
   sentiment_score: number;
   keyword_score: number;
   war_risk_score: number;
+  event_type?: string | null;
+  event_severity?: string | null;
+  event_confidence?: number | null;
 };
 
 export type LiveChannel = {
@@ -108,6 +120,11 @@ export type RefreshResult = {
   } | null;
   markets: {
     refreshed: number;
+  } | null;
+  ground_truth?: {
+    vix?: { fetched: number; stored: number; error?: string | null };
+    world_bank?: { fetched: number; stored: number; error?: string | null };
+    acled?: { fetched: number; stored: number; error?: string | null; skipped?: string };
   } | null;
   errors: string[];
 };
@@ -300,6 +317,15 @@ export const api = {
   getMarketSnapshots: () => request<MarketSnapshot[]>("/markets/snapshots"),
   getStocks: (limit: number = 25) => request<MarketSnapshot[]>(`/markets/stocks?limit=${limit}`),
   getCrypto: (limit: number = 25) => request<MarketSnapshot[]>(`/markets/crypto?limit=${limit}`),
+  getMarketCandles: (symbol: string, opts?: { period?: string; interval?: string; limit?: number }) => {
+    const params = new URLSearchParams({
+      symbol,
+      period: opts?.period || "5d",
+      interval: opts?.interval || "15m",
+      limit: String(opts?.limit || 80),
+    });
+    return request<MarketCandle[]>(`/markets/candles?${params.toString()}`);
+  },
   getLatestNews: () => request<NewsArticle[]>("/news/latest?limit=15"),
   getMapLayers: (opts?: { include_osint?: boolean; overlays?: Array<"fire_hotspots" | "ship_density" | "flight_diversions"> }) => {
     const params = new URLSearchParams();

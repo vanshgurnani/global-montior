@@ -35,6 +35,21 @@ class Settings(BaseSettings):
     model_auto_train_on_refresh: bool = False
     model_train_retry_minutes: int = 60
     use_transformer_sentiment: bool = False
+    rl_enabled: bool = True
+    rl_policy_name: str = "market_q_policy_v1"
+
+    # Optional event classification enrichment for articles.
+    # - Transformer mode uses a zero-shot classifier (may download weights if not cached).
+    # - OpenAI mode uses embeddings and lightweight prototype matching.
+    use_transformer_event_classifier: bool = False
+    use_openai_event_classifier: bool = False
+    openai_api_key: Optional[str] = None
+    openai_embeddings_model: str = "text-embedding-3-small"
+
+    # Ground truth datasets for train/validate (ACLED requires free registration)
+    ground_truth_enabled: bool = True
+    acled_api_key: Optional[str] = None
+    acled_email: Optional[str] = None
 
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 

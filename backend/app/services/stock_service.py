@@ -29,6 +29,14 @@ DEFAULT_SYMBOL_MAP = {
     "EWU": "iShares MSCI UK ETF",
     "FXI": "iShares China Large-Cap ETF",
     "INDA": "iShares India 50 ETF",
+    "USO": "United States Oil Fund",
+    "GLD": "SPDR Gold Shares",
+    "GC=F": "Gold Futures",
+    "CL=F": "Crude Oil Futures",
+    "ITA": "iShares U.S. Aerospace & Defense ETF",
+    "RTX": "RTX Corp (Defense)",
+    "LMT": "Lockheed Martin",
+    "NOC": "Northrop Grumman",
     # US large caps
     "AAPL": "Apple",
     "MSFT": "Microsoft",
@@ -92,12 +100,12 @@ ETF_SYMBOLS = {
 PRIORITY_SYMBOLS = [
     "BTC-USD",
     "ETH-USD",
-    "SOL-USD",
-    "BNB-USD",
-    "XRP-USD",
-    "DOGE-USD",
     "^GSPC",
     "^IXIC",
+    "USO",
+    "GLD",
+    "ITA",
+    "RTX",
     "AAPL",
     "MSFT",
     "NVDA",
@@ -173,6 +181,8 @@ class StockService:
 
             latest_price = float(close.iloc[-1])
             momentum_7d = float((close.iloc[-1] - close.iloc[-8]) / close.iloc[-8] * 100)
+            momentum_1d = float((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2] * 100) if len(close) >= 2 else 0.0
+            momentum_3d = float((close.iloc[-4] - close.iloc[-7]) / close.iloc[-7] * 100) if len(close) >= 7 else 0.0
             recent_vol = float(volume.iloc[-1])
             avg_prev_vol = float(volume.iloc[-21:-1].mean()) if float(volume.iloc[-21:-1].mean()) else 1.0
             volume_spike_pct = ((recent_vol - avg_prev_vol) / avg_prev_vol) * 100
@@ -186,6 +196,8 @@ class StockService:
                     "asset_type": self._asset_type(symbol),
                     "price": latest_price,
                     "momentum_7d": round(momentum_7d, 4),
+                    "momentum_1d": round(momentum_1d, 4),
+                    "momentum_3d": round(momentum_3d, 4),
                     "volume_spike_pct": round(volume_spike_pct, 4),
                     "ma20": round(ma20, 4),
                     "ma50": round(ma50, 4),
@@ -195,6 +207,32 @@ class StockService:
             )
 
         return snapshots
+
+    def fetch_candles(self, symbol: str, period: str = "5d", interval: str = "15m", limit: int = 80) -> list[dict]:
+        try:
+            hist = yf.Ticker(symbol).history(period=period, interval=interval)
+        except Exception:
+            return []
+
+        if hist.empty:
+            return []
+
+        rows: list[dict] = []
+        for idx, row in hist.tail(max(10, min(limit, 200))).iterrows():
+            try:
+                rows.append(
+                    {
+                        "time": idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx,
+                        "open": round(float(row["Open"]), 4),
+                        "high": round(float(row["High"]), 4),
+                        "low": round(float(row["Low"]), 4),
+                        "close": round(float(row["Close"]), 4),
+                        "volume": round(float(row["Volume"]), 4) if "Volume" in row else None,
+                    }
+                )
+            except Exception:
+                continue
+        return rows
 
 
 stock_service = StockService()

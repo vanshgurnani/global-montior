@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { LiveCandlestickChart } from "@/components/LiveCandlestickChart";
 import { RiskMap } from "@/components/RiskMap";
 import { TrendChart } from "@/components/TrendChart";
 import {
@@ -9,17 +10,27 @@ import {
   type IntelligenceDashboard,
   type LiveChannel,
   type MarketSnapshot,
-  type NewsArticle,
   type RefreshResult,
   type RiskOverview,
 } from "@/lib/api";
+
+function dedupeByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = (keyFn(item) || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
 
 export default function App() {
   const [risk, setRisk] = useState<RiskOverview | null>(null);
   const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
   const [stockData, setStockData] = useState<MarketSnapshot[]>([]);
   const [cryptoData, setCryptoData] = useState<MarketSnapshot[]>([]);
-  const [news, setNews] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,28 +53,31 @@ export default function App() {
   const loadDashboard = () => {
     setError(null);
     setLoading(true);
-    return Promise.all([
-      api.getRiskOverview(),
-      api.getMarketSnapshots(),
-      api.getStocks(20),
-      api.getCrypto(20),
-      api.getLatestNews(),
-      api.getIntelligenceDashboard(),
-    ])
-      .then(([riskData, marketData, stocks, crypto, newsData, intelData]) => {
+
+    // Phase 1: Load critical data first so UI appears quickly
+    api
+      .getRiskOverview()
+      .then((riskData) => {
         setRisk(riskData);
-        setSnapshots(marketData);
-        setStockData(stocks);
-        setCryptoData(crypto);
-        setNews(newsData);
-        setIntel(intelData);
-        const topCountry = intelData.country_risk_dashboard?.[0]?.country || "";
-        setSelectedCountry(topCountry);
+        setLoading(false);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+        setLoading(false);
+      });
+
+    // Phase 2: Load heavier endpoints in parallel, update as each completes
+    api.getMarketSnapshots().then(setSnapshots).catch(() => {});
+    api.getStocks(20).then(setStockData).catch(() => {});
+    api.getCrypto(20).then(setCryptoData).catch(() => {});
+    api
+      .getIntelligenceDashboard()
+      .then((intelData) => {
+        setIntel(intelData);
+        const top = intelData.country_risk_dashboard?.[0]?.country || "";
+        setSelectedCountry(top);
       })
-      .finally(() => setLoading(false));
+      .catch(() => setIntel(null));
   };
 
   const refreshData = () => {
@@ -84,23 +98,6 @@ export default function App() {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
-
-  useEffect(() => {
-    const stream = new EventSource(api.newsStreamUrl());
-    stream.addEventListener("news", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data) as { items?: NewsArticle[] };
-        if (Array.isArray(parsed.items)) {
-          setNews(parsed.items);
-        }
-      } catch {
-        // no-op
-      }
-    });
-    return () => {
-      stream.close();
-    };
   }, []);
 
   useEffect(() => {
@@ -149,6 +146,10 @@ export default function App() {
   const topGainers = [...snapshots].sort((a, b) => b.prob_up - a.prob_up).slice(0, 5);
   const currentChannel = liveChannels[activeChannelIndex] || liveChannels[0] || null;
   const baseInstability = intel?.global_risk_index.global_instability_score ?? 0;
+  const aiNewsSummaries = dedupeByKey(intel?.ai_news_summaries || [], (row) => `${row.time}|${row.source}|${row.title}|${row.briefing}`);
+  const eventTimeline = dedupeByKey(intel?.event_timeline || [], (row) => row.url || `${row.time}|${row.source}|${row.title}`);
+  const countryHeadlines = dedupeByKey(countryIntel?.snapshot?.news || [], (headline) => headline);
+  const popupHeadlines = dedupeByKey(popupIntel?.snapshot?.news || [], (headline) => headline);
   const scenarioCards = [
     {
       name: "De-escalation Window",
@@ -222,14 +223,12 @@ export default function App() {
       {error ? <p className="status-line status-error">Data load error: {error}</p> : null}
       {refreshResult ? (
         <p className="status-line">
-          model_trained={String(refreshResult.training?.trained ?? false)}, samples=
-          {Math.round(refreshResult.training?.metrics?.samples ?? 0)}, Refresh result: provider=
-          {refreshResult.news?.provider ?? "n/a"}, sources=
-          {(refreshResult.news?.sources || []).join(",") || "n/a"}, fetched={refreshResult.news?.fetched ?? 0}, inserted=
-          {refreshResult.news?.inserted ?? 0}, by_source=
-          {JSON.stringify(refreshResult.news?.source_counts || {})}, market_refreshed=
-          {refreshResult.markets?.refreshed ?? 0}
-          {refreshResult.errors.length > 0 ? `, errors=${refreshResult.errors.join(" | ")}` : ""}
+          News: {refreshResult.news?.inserted ?? 0} new | Markets: {refreshResult.markets?.refreshed ?? 0} | Model:{" "}
+          {String(refreshResult.training?.trained ?? false)}
+          {refreshResult.ground_truth
+            ? ` | Ground truth: VIX=${refreshResult.ground_truth.vix?.stored ?? 0}, WB=${refreshResult.ground_truth.world_bank?.stored ?? 0}`
+            : ""}
+          {refreshResult.errors.length > 0 ? ` | Errors: ${refreshResult.errors.join(", ")}` : ""}
         </p>
       ) : null}
       {!loading && !error && snapshots.length === 0 ? <p className="status-line">No market data available yet.</p> : null}
@@ -299,6 +298,8 @@ export default function App() {
             </p>
             <p className="video-help">YouTube API mode: {youtubeApiEnabled ? "enabled" : "fallback stream lookup"}</p>
           </div>
+
+          <LiveCandlestickChart snapshots={snapshots} />
         </section>
 
         <section className="bottom-pane">
@@ -390,25 +391,54 @@ export default function App() {
         </div>
 
         <div className="card pane-scroll">
+          <h3>Ground Truth</h3>
+          {refreshResult?.ground_truth ? (
+            <ul className="list">
+              <li>
+                <span>VIX</span>
+                <span>{refreshResult.ground_truth.vix?.stored ?? 0} days</span>
+              </li>
+              <li>
+                <span>World Bank</span>
+                <span>{refreshResult.ground_truth.world_bank?.stored ?? 0} indicators</span>
+              </li>
+              <li>
+                <span>ACLED</span>
+                <span>{refreshResult.ground_truth.acled?.stored ?? 0} events</span>
+              </li>
+            </ul>
+          ) : (
+            <p className="map-caption">Click refresh to load ground truth (VIX, World Bank, ACLED)</p>
+          )}
+        </div>
+
+        <div className="card pane-scroll">
           <h3>Market Impact Predictor</h3>
           <table className="table compact-table">
             <thead>
               <tr>
                 <th>Asset</th>
-                <th>5D Return</th>
-                <th>Down Prob</th>
-                <th>Impact Risk</th>
+                <th>Current</th>
+                <th>Predicted (5D)</th>
+                <th>Change</th>
               </tr>
             </thead>
             <tbody>
-              {(intel?.market_impact_predictor || []).map((row) => (
-                <tr key={row.asset}>
-                  <td>{row.asset}</td>
-                  <td>{row.predicted_return_5d.toFixed(2)}%</td>
-                  <td>{(row.prob_down * 100).toFixed(1)}%</td>
-                  <td>{(row.impact_risk * 100).toFixed(0)}%</td>
-                </tr>
-              ))}
+              {(intel?.market_impact_predictor || []).map((row) => {
+                const current = row.price;
+                const predicted = current > 0 ? current * (1 + row.predicted_return_5d / 100) : 0;
+                return (
+                  <tr key={row.asset}>
+                    <td>{row.asset}</td>
+                    <td>{current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>{predicted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className={row.predicted_return_5d >= 0 ? "text-green" : "text-red"}>
+                      {row.predicted_return_5d >= 0 ? "+" : ""}
+                      {row.predicted_return_5d.toFixed(2)}%
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -511,8 +541,8 @@ export default function App() {
         <div className="card pane-scroll">
           <h3>AI News Summaries & Timeline</h3>
           <ul className="list">
-            {(intel?.ai_news_summaries || []).slice(0, 6).map((row) => (
-              <li key={`${row.time}-${row.title}`} className="news-item">
+            {aiNewsSummaries.slice(0, 6).map((row) => (
+              <li key={`${row.time}-${row.source}-${row.title}`} className="news-item">
                 <span>{row.briefing}</span>
                 <span>{row.source}</span>
               </li>
@@ -520,8 +550,8 @@ export default function App() {
           </ul>
           <p className="map-caption">Recent Event Timeline</p>
           <ul className="list">
-            {(intel?.event_timeline || []).slice(0, 6).map((row) => (
-              <li key={`${row.time}-${row.url}`}>
+            {eventTimeline.slice(0, 6).map((row) => (
+              <li key={row.url ? `${row.time}-${row.url}` : `${row.time}-${row.source}-${row.title}`}>
                 <span>{row.title}</span>
                 <span>{row.category}</span>
               </li>
@@ -550,7 +580,7 @@ export default function App() {
               <p>Military Activity: {countryIntel.snapshot.military_activity}</p>
               <p>Predicted Market Impact: {(countryIntel.snapshot.predicted_market_impact * 100).toFixed(1)}%</p>
               <ul className="list">
-                {countryIntel.snapshot.news.map((headline) => (
+                {countryHeadlines.map((headline) => (
                   <li key={headline}>
                     <span>{headline}</span>
                   </li>
@@ -623,7 +653,7 @@ export default function App() {
                 <p>Military Activity Signals: {popupIntel.snapshot.military_activity}</p>
                 <p>Potential Threat Headlines:</p>
                 <ul className="list">
-                  {popupIntel.snapshot.news.map((headline) => (
+                  {popupHeadlines.map((headline) => (
                     <li key={headline}>
                       <span>{headline}</span>
                     </li>
