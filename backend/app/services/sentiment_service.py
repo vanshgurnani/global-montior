@@ -36,14 +36,34 @@ class SentimentService:
 
     @staticmethod
     def _fallback_score(text: str) -> float:
-        negatives = ["war", "crisis", "collapse", "sanctions", "invasion", "attack"]
-        positives = ["peace", "deal", "growth", "stability", "recovery"]
+        # Neutral words (don't confuse event mentions with sentiment)
+        event_words = ["war", "crisis", "sanctions", "invasion", "attack", "conflict", "tensions"]
+        
+        # Explicitly positive sentiment
+        positives = ["peace", "deal", "growth", "stability", "recovery", "agreement", "talks", "resolution"]
+        
+        # Explicitly negative sentiment (market harm)
+        negatives = ["collapse", "recession", "default", "bankruptcy", "crash", "plunge", "freefall"]
+        
         t = text.lower()
-        neg = sum(1 for w in negatives if w in t)
-        pos = sum(1 for w in positives if w in t)
-        if neg == pos:
+        
+        # Count positives vs negatives (not event mentions)
+        neg_count = sum(1 for w in negatives if w in t)
+        pos_count = sum(1 for w in positives if w in t)
+        
+        # Event mentions are neutral (0.0) unless paired with sentiment
+        event_count = sum(1 for w in event_words if w in t)
+        
+        # If only event words mentioned (no sentiment), neutral
+        if pos_count == 0 and neg_count == 0:
             return 0.0
-        return max(-1.0, min(1.0, (pos - neg) / 6.0))
+        
+        # Scale: More explicit sentiment words = stronger signal
+        if pos_count > neg_count:
+            return max(0.0, min(1.0, (pos_count - neg_count) / 5.0))
+        elif neg_count > pos_count:
+            return max(-1.0, min(0.0, (pos_count - neg_count) / 5.0))
+        return 0.0
 
 
 sentiment_service = SentimentService()

@@ -336,6 +336,7 @@ export const api = {
   },
   getLiveChannels: () => request<LiveChannelResponse>("/news/live-channels"),
   getIntelligenceDashboard: () => request<IntelligenceDashboard>("/intelligence/dashboard"),
+  getPredictionAccuracy: () => request<any>("/intelligence/prediction-accuracy"),
   getCountryIntelligence: (country: string) => request<CountryIntelligence>(`/intelligence/country/${encodeURIComponent(country)}`),
   refreshData: () => post<RefreshResult>("/jobs/refresh"),
   newsStreamUrl: () => `${API_BASE}/news/stream?limit=15&interval_seconds=8`,

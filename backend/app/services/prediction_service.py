@@ -16,15 +16,32 @@ SYMBOL_TO_COUNTRY: dict[str, str] = {
 }
 
 WAR_RISK_BETA_BY_SYMBOL: dict[str, float] = {
-    # Safe havens / war beneficiaries (heuristic sign flip vs broad equities).
-    "GLD": 0.10,
-    "GC=F": 0.10,
-    "USO": 0.12,
-    "CL=F": 0.12,
-    "ITA": 0.06,
-    "RTX": 0.06,
-    "LMT": 0.06,
-    "NOC": 0.06,
+    # Safe havens / war beneficiaries (positive = benefits from geopolitical risk)
+    "GLD": 0.20,      # Gold: strong positive correlation to war
+    "GC=F": 0.20,     # Gold futures
+    "USO": 0.25,      # Oil/Energy: high sensitivity to supply shocks
+    "CL=F": 0.25,     # Crude oil
+    "TLT": 0.08,      # Bonds: flight-to-safety
+    "IEF": 0.06,      # Intermediate bonds
+    # Defense/Military contractors: war is bullish
+    "ITA": 0.15,      # Aerospace ETF
+    "RTX": 0.14,      # Raytheon (RTX)
+    "LMT": 0.12,      # Lockheed Martin
+    "NOC": 0.12,      # Northrop Grumman
+    "BA": 0.08,       # Boeing
+    "GD": 0.10,       # General Dynamics
+    # Utilities (defensive, hedge)
+    "XLU": -0.05,     # Utilities: slightly defensive
+    # Tech (cyclical, hurt by uncertainty)
+    "ACE": -0.18,     # Software (offensive)
+    "XLK": -0.15,     # Tech sector
+    "QQQ": -0.18,     # Nasdaq: growth sensitive
+    # Broad equities (hurt by war risk)
+    "VTI": -0.16,     # Total market
+    "SPY": -0.15,     # S&P 500
+    "^GSPC": -0.15,   # S&P 500 index
+    "^IXIC": -0.18,   # Nasdaq index
+    "IVV": -0.15,     # iShares S&P 500
 }
 
 
@@ -150,16 +167,22 @@ class PredictionService:
         return np.array(x_rows, dtype=float), np.array(y_cls, dtype=float), np.array(y_reg, dtype=float)
 
     def train_if_needed(self, force: bool = False) -> Dict[str, Any]:
-        if self._cls_model is not None and self._reg_model is not None and not force:
+        now = datetime.utcnow()
+        
+        # Force retrain if model is older than 6 hours (was basically "train once")
+        age_hours = (now - self._trained_at).total_seconds() / 3600 if self._trained_at else float('inf')
+        
+        if self._cls_model is not None and self._reg_model is not None and not force and age_hours < 6:
             return {
                 "trained": True,
                 "cached": True,
                 "trained_at": self._trained_at.isoformat() if self._trained_at else None,
                 "metrics": self._model_metrics,
+                "age_hours": round(age_hours, 2),
             }
 
-        now = datetime.utcnow()
-        retry_after = timedelta(minutes=max(1, int(settings.model_train_retry_minutes)))
+        # Backoff: don't retry failed training too frequently
+        retry_after = timedelta(minutes=max(15, int(settings.model_train_retry_minutes)))
         if (
             not force
             and self._last_train_attempt is not None
@@ -265,24 +288,32 @@ class PredictionService:
         s = max(-1.0, min(1.0, sentiment_score))
         k = max(0.0, min(1.0, keyword_risk))
 
-        # War risk doesn't impact all assets equally (e.g., gold/defense can benefit from escalation).
+        # War risk impact varies by asset (gold +, equities -, defense +)
         sym = (symbol or "").upper()
-        war_beta = WAR_RISK_BETA_BY_SYMBOL.get(sym, -0.20)
-        composite = (0.32 * m) + (0.18 * v) + (0.2 * s) + (war_beta * k) - (0.1 * vx)
-        prob_up = max(0.05, min(0.95, 0.5 + composite / 2.0))
+        war_beta = WAR_RISK_BETA_BY_SYMBOL.get(sym, -0.14)  # Default conservative estimate
+        
+        # Better feature weighting: separate technical from macro
+        technical_score = (0.37 * m) + (0.22 * v)  # Strong weight on price action
+        macro_risk = (0.15 * s) + (war_beta * 0.5 * k)  # Sentiment + war impact
+        volatility_drag = 0.12 * vx  # VIX reduces probability
+        
+        composite = technical_score + macro_risk - volatility_drag
+        prob_up = max(0.03, min(0.97, 0.5 + composite / 2.5))  # Better calibrated
         prob_down = 1.0 - prob_up
 
-        uncertainty = (k + vx + max(0.0, -s)) / 3.0
-        if uncertainty > 0.65:
+        # Rebalanced uncertainty: war + volatility + negative sentiment
+        uncertainty = (k * 0.4) + (vx * 0.35) + (max(0.0, -s) * 0.25)
+        if uncertainty > 0.66:
             risk_level = "High"
-        elif uncertainty > 0.35:
+        elif uncertainty > 0.33:
             risk_level = "Medium"
         else:
             risk_level = "Low"
 
         ma_gap = ((ma20 - ma50) / ma50) * 100.0 if ma50 else 0.0
-        predicted_return_5d = (m * 2.2) + (v * 0.7) - (vx * 1.2) + (war_beta * 4.5 * k)
-        confidence = abs(prob_up - 0.5) * 2.0
+        predicted_return_5d = (m * 2.4) + (v * 0.8) - (vx * 1.4) + (war_beta * 3.5 * k)
+        # Confidence penalized by uncertainty
+        confidence = max(0.2, min(0.95, abs(prob_up - 0.5) * 2.5 * (1.0 - uncertainty)))
 
         explanation = (
             f"Momentum={momentum_7d:.2f}%, VolumeSpike={volume_spike_pct:.2f}%, "

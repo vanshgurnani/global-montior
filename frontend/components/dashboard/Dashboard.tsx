@@ -1,9 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode, useEffect } from "react";
 
 import { RiskMap } from "@/components/RiskMap";
 import { TrendChart } from "@/components/TrendChart";
 import { ImpactTag, type ImpactLevel } from "@/components/ui/ImpactTag";
 import { Modal } from "@/components/ui/Modal";
+import { PredictionAccuracy, type PredictionAccuracyResponse } from "@/components/PredictionAccuracy";
 import { api, type IntelligenceDashboard, type MarketSnapshot, type NewsArticle, type RiskOverview } from "@/lib/api";
 
 type ModalState =
@@ -147,6 +148,15 @@ export function Dashboard({
   onRefresh: () => void;
 }) {
   const [modal, setModal] = useState<ModalState>({ open: false });
+  const [predictionAccuracy, setPredictionAccuracy] = useState<PredictionAccuracyResponse | null>(null);
+
+  // Fetch prediction accuracy data
+  useEffect(() => {
+    api
+      .getPredictionAccuracy()
+      .then((data) => setPredictionAccuracy(data))
+      .catch(() => setPredictionAccuracy(null));
+  }, []);
 
   const globalRiskIndex01 = intel?.global_risk_index.global_instability_score ?? risk?.global_war_risk ?? 0;
   const globalRiskIndex = pct01(globalRiskIndex01);
@@ -796,6 +806,16 @@ export function Dashboard({
               )}
             </ul>
           </div>
+        </Section>
+
+        <Section title="Prediction Before News" hint="Model accuracy tracking">
+          {predictionAccuracy ? (
+            <PredictionAccuracy data={predictionAccuracy} />
+          ) : (
+            <div className="card">
+              <p className="status-line">Loading prediction accuracy data…</p>
+            </div>
+          )}
         </Section>
 
         <Section title="Explore" hint="Deeper tools (collapsed by default)">

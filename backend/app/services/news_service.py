@@ -232,11 +232,12 @@ class NewsService:
                 continue
 
             text = f"{item.get('title', '')} {item.get('summary', '')}"
+            title = item.get('title', '')
             sentiment_score = sentiment_service.analyze(text)
             keyword_score, hits = war_risk_service.keyword_score(text)
             event_cls = event_classification_service.classify(text)
             war_risk_score = war_risk_service.combined_war_risk(sentiment_score, keyword_score)
-            country = war_risk_service.country_from_text(text)
+            country = war_risk_service.country_from_text(text, title=title)
 
             doc = {
                 "title": item.get("title", ""),
