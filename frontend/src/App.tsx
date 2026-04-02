@@ -198,7 +198,7 @@ export default function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Global Intelligence Monitor</p>
-          <h1>AI Geopolitical & Market Intelligence</h1>
+          <h1>Geopluse</h1>
           <p className="subtitle">Real-time news, war signal detection, sentiment, and probabilistic market outlook.</p>
         </div>
         <div className="risk-actions">
