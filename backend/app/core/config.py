@@ -9,10 +9,14 @@ ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 class Settings(BaseSettings):
     app_name: str = "Global Intelligence Monitor API"
     app_env: str = "dev"
-    debug: bool = True
+    debug: bool = False  # Disabled by default for production
 
     mongodb_url: str = "mongodb://mongo:27017"
     mongodb_db_name: str = "gim"
+    
+    # Request timeouts for external services
+    request_timeout: int = 20  # seconds
+    external_api_timeout: int = 30  # seconds
 
     news_api_key: Optional[str] = None
     news_provider: str = "gdelt"  # newsapi | gdelt
@@ -55,7 +59,15 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        # Support dynamic origins for Render deployment
+        if self.app_env == "production":
+            # In production, allow your frontend domain and prevent wildcards
+            origins = [
+                "https://global-montior.vercel.app",
+                "https://global-montior.netlify.app",  # If using Netlify
+            ]
+        else:
+            origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
         return origins or ["http://localhost:3000", "http://localhost:5173"]
 
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")

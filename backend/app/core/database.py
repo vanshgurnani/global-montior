@@ -5,9 +5,13 @@ from app.core.config import settings
 
 mongo_client = MongoClient(
     settings.mongodb_url,
-    serverSelectionTimeoutMS=5000,
-    connectTimeoutMS=5000,
-    socketTimeoutMS=5000,
+    serverSelectionTimeoutMS=30000,  # Increased for Render
+    connectTimeoutMS=30000,  # Increased for Render
+    socketTimeoutMS=30000,  # Increased for Render
+    maxPoolSize=50,  # Connection pooling
+    minPoolSize=10,  # Maintain minimum connections
+    waitQueueTimeoutMS=10000,
+    retryWrites=True,
 )
 
 
