@@ -10,15 +10,8 @@ from app.core.config import settings
 from app.core.database import create_indexes
 from app.jobs.scheduler import start_scheduler
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-CODE_LEVEL_CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://global-montior.vercel.app"
-]
 
 
 @asynccontextmanager
@@ -45,6 +38,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

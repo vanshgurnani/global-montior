@@ -59,16 +59,19 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        # Support dynamic origins for Render deployment
-        if self.app_env == "production":
-            # In production, allow your frontend domain and prevent wildcards
-            origins = [
-                "https://global-montior.vercel.app",
-                "https://global-montior.netlify.app",  # If using Netlify
-            ]
-        else:
-            origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
-        return origins or ["http://localhost:3000", "http://localhost:5173"]
+        configured = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        defaults = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://global-montior.vercel.app",
+            "https://global-montior.netlify.app",
+        ]
+
+        origins: list[str] = []
+        for origin in [*configured, *defaults]:
+            if origin and origin not in origins:
+                origins.append(origin)
+        return origins
 
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
 
