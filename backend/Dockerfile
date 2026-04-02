@@ -10,4 +10,6 @@ COPY app /app/app
 COPY .env.example /app/.env.example
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Use workers for production (2-4 workers for Render starter instance)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout", "60"]
