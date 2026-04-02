@@ -9,4 +9,12 @@ export default defineConfig({
       "@": path.resolve(__dirname),
     },
   },
+  server: {
+    proxy: {
+      "/api/v1": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 });
