@@ -351,22 +351,169 @@ class IntelligenceService:
         now = _utc_now()
         d1 = [a for a in articles if _to_dt(a.get("published_at")) >= now - timedelta(days=1)]
         d7 = [a for a in articles if _to_dt(a.get("published_at")) >= now - timedelta(days=7)]
+        d14 = [a for a in articles if _to_dt(a.get("published_at")) >= now - timedelta(days=14)]
         prev7 = [a for a in articles if now - timedelta(days=14) <= _to_dt(a.get("published_at")) < now - timedelta(days=7)]
+        prev14 = [a for a in articles if now - timedelta(days=28) <= _to_dt(a.get("published_at")) < now - timedelta(days=14)]
 
+        # Calculate moving averages
+        avg1 = sum(float(x.get("war_risk_score", 0.0)) for x in d1) / len(d1) if d1 else float(risk_index["war_risk"])
         avg7 = sum(float(x.get("war_risk_score", 0.0)) for x in d7) / len(d7) if d7 else float(risk_index["war_risk"])
-        prev = sum(float(x.get("war_risk_score", 0.0)) for x in prev7) / len(prev7) if prev7 else avg7
-        momentum = avg7 - prev
+        avg14 = sum(float(x.get("war_risk_score", 0.0)) for x in d14) / len(d14) if d14 else float(risk_index["war_risk"])
+        prev7_avg = sum(float(x.get("war_risk_score", 0.0)) for x in prev7) / len(prev7) if prev7 else avg7
+        prev14_avg = sum(float(x.get("war_risk_score", 0.0)) for x in prev14) / len(prev14) if prev14 else avg7
+
+        # Momentum: 7d vs previous 7d
+        momentum_7d = avg7 - prev7_avg
+        
+        # Acceleration: is momentum changing?
+        momentum_14d = avg14 - prev14_avg
+        acceleration = momentum_7d - (momentum_14d / 2.0) if prev14_avg else 0.0
 
         base = float(risk_index["global_instability_score"])
-        trend_7d = _clip(base + 0.4 * momentum + (0.05 if len(d1) >= 20 else 0.0))
-        trend_30d = _clip(base + 0.8 * momentum + (0.07 if len(d7) >= 120 else 0.0))
+        
+        # Mean-reversion: extreme values tend to revert
+        mean_reversion_factor = 1.0
+        if avg7 > 0.70:
+            mean_reversion_factor = 0.85  # High risk reverts down
+        elif avg7 < 0.30:
+            mean_reversion_factor = 1.10  # Low risk can spike up
+        
+        # Improved 7d forecast: momentum + acceleration - mean reversion
+        trend_7d = _clip(base + 0.35 * momentum_7d + 0.10 * acceleration + (0.06 if len(d1) >= 20 else 0.0))
+        trend_7d = trend_7d * mean_reversion_factor if mean_reversion_factor != 1.0 else trend_7d
+        
+        # 30d forecast: longer-term momentum with stronger mean-reversion
+        trend_30d = _clip(base + 0.45 * momentum_7d + 0.15 * acceleration + (0.08 if len(d7) >= 120 else 0.0))
+        trend_30d = _clip(trend_30d * 0.9) if base > 0.65 else trend_30d
+
+        # Volatility assessment: high variance = uncertain forecast
+        if d7:
+            variance = sum((float(x.get("war_risk_score", 0.0)) - avg7) ** 2 for x in d7) / len(d7)
+            forecast_uncertainty = min(variance * 0.8, 0.3)
+        else:
+            forecast_uncertainty = 0.0
 
         return {
             "next_7d_instability": round(trend_7d, 4),
             "next_30d_instability": round(trend_30d, 4),
-            "trend": "rising" if momentum > 0.015 else ("cooling" if momentum < -0.015 else "sideways"),
-            "signal_strength": round(abs(momentum), 4),
+            "trend": "rising" if momentum_7d > 0.02 else ("cooling" if momentum_7d < -0.02 else "sideways"),
+            "signal_strength": round(abs(momentum_7d), 4),
+            "acceleration": round(acceleration, 4),
+            "forecast_uncertainty": round(forecast_uncertainty, 4),
         }
+
+    def _prediction_vs_reality(self, db: Database, articles: list[dict[str, Any]], markets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Generates prediction accuracy scores by comparing predictions made BEFORE news events
+        with the actual outcomes shown in news articles.
+        
+        Returns a list of prediction-reality pairs showing what was predicted vs what happened.
+        """
+        if not articles or not markets:
+            return []
+        
+        now = _utc_now()
+        prediction_vs_reality = []
+        
+        # Map symbols to countries/assets for context
+        symbol_to_context = {
+            "^GSPC": "USA (S&P 500)", "^IXIC": "USA (Nasdaq)", "GLD": "Global (Gold)",
+            "USO": "Global (Oil)", "^VIX": "USA (Market Volatility)", "CL=F": "Global (Crude Oil)",
+            "BTC-USD": "Global (Bitcoin)", "RTX": "USA (Defense)"
+        }
+        
+        # Get recent articles (last 5 days) for matching with predictions
+        recent_articles = [a for a in articles if _to_dt(a.get("published_at")) >= now - timedelta(days=5)]
+        
+        # Get historical market predictions (last 30 days) from markets
+        for market in markets[-50:]:  # Check last 50 market snapshots
+            market_time = _to_dt(market.get("as_of", now))
+            symbol = market.get("symbol", "")
+            market_context = symbol_to_context.get(symbol, symbol)
+            
+            prob_up = float(market.get("prob_up", 0.0))
+            prob_down = float(market.get("prob_down", 0.0))
+            risk_level = market.get("risk_level", "Low")
+            
+            # Classify prediction
+            if prob_up > 0.6:
+                predicted_direction = "up"
+                prediction_confidence = prob_up
+            elif prob_down > 0.6:
+                predicted_direction = "down"
+                prediction_confidence = prob_down
+            else:
+                predicted_direction = "neutral"
+                prediction_confidence = 0.5
+            
+            # Look for news within 1-7 days after this prediction
+            matching_articles = []
+            for article in recent_articles:
+                article_time = _to_dt(article.get("published_at"))
+                days_after_prediction = (article_time - market_time).days
+                
+                # Find articles published 0-7 days after prediction
+                if 0 <= days_after_prediction <= 7:
+                    # Check if article is about the same asset/region
+                    article_text = self._text(article).lower()
+                    symbol_keywords = symbol.lower().split("-")[0] if "-" in symbol else symbol.lower()
+                    
+                    # For indices and assets, match by keywords
+                    if any(keyword in article_text for keyword in [
+                        "market", "stock", "s&p", "nasdaq", "dow", "oil", "gold", 
+                        "commodity", "bitcoin", "defense", "defense contractor",
+                        market.get("name", "").lower()
+                    ]):
+                        matching_articles.append(article)
+            
+            # If we found matching articles, create a prediction vs reality record
+            if matching_articles:
+                # Calculate if prediction was accurate
+                avg_risk_in_news = sum(float(a.get("war_risk_score", 0.0)) for a in matching_articles) / len(matching_articles)
+                avg_sentiment_in_news = sum(float(a.get("sentiment_score", 0.0)) for a in matching_articles) / len(matching_articles)
+                
+                # Determine actual outcome from news
+                if avg_risk_in_news > 0.6:
+                    actual_direction = "down"  # Higher risk → market likely down
+                    actual_severity = "high"
+                elif avg_risk_in_news > 0.3:
+                    actual_direction = "sideways"
+                    actual_severity = "medium"
+                else:
+                    actual_direction = "up"  # Lower risk → market likely up
+                    actual_severity = "low"
+                
+                # Calculate accuracy: did prediction match reality?
+                accuracy = 0.0
+                if predicted_direction == actual_direction:
+                    accuracy = prediction_confidence
+                elif predicted_direction == "neutral":
+                    accuracy = 0.5
+                else:
+                    # Opposite prediction
+                    accuracy = 1.0 - prediction_confidence
+                
+                top_headlines = [a.get("title", "") for a in matching_articles[:2]]
+                
+                prediction_vs_reality.append({
+                    "asset": market_context,
+                    "symbol": symbol,
+                    "prediction_date": market_time.isoformat(),
+                    "predicted_direction": predicted_direction,
+                    "prediction_confidence": round(prediction_confidence, 4),
+                    "actual_outcome": actual_direction,
+                    "outcome_severity": actual_severity,
+                    "prediction_accuracy": round(accuracy, 4),
+                    "days_to_outcome": matching_articles[0].get("published_at"),
+                    "news_count": len(matching_articles),
+                    "top_headlines": top_headlines,
+                    "avg_market_risk": round(avg_risk_in_news, 4),
+                    "avg_sentiment": round(avg_sentiment_in_news, 4),
+                })
+        
+        # Sort by accuracy (high to low) and return top 15
+        prediction_vs_reality.sort(key=lambda x: x["prediction_accuracy"], reverse=True)
+        return prediction_vs_reality[:15]
 
     def dashboard(self, db: Database) -> dict[str, Any]:
         freshness = self._ensure_live_inputs(db)
@@ -506,6 +653,7 @@ class IntelligenceService:
             )
 
         forecast = self._forecast(articles, risk_index)
+        prediction_accuracies = self._prediction_vs_reality(db, articles, markets)
         instability = risk_index["global_instability_score"]
         top_conflict_prob = max((float(c["war_probability"]) for c in conflicts), default=0.2)
         upcoming_world_war_probability = _clip(0.55 * top_conflict_prob + 0.45 * float(instability))
@@ -549,6 +697,7 @@ class IntelligenceService:
             ],
             "global_sentiment_heatmap": sentiment_heatmap,
             "geopolitical_forecast_panel": forecast,
+            "prediction_vs_reality": prediction_accuracies,
             "multi_screen_layout": {"enabled": True, "panels": 6},
             "ui_mode": {
                 "theme": "boomerang-terminal",

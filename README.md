@@ -1,287 +1,187 @@
 # Global Intelligence Monitor
 
-AI-powered geopolitical intelligence platform with real-time threat monitoring, conflict analytics, market risk modeling, and a multi-panel operations dashboard.
+Geopolitical and market intelligence stack: **FastAPI + MongoDB** backend for ingestion, scoring, and intelligence APIs; **React + Vite + TypeScript** frontend for a multi-panel operations dashboard (dark UI, map, live feeds, markets).
 
-## 1) System Overview
-The platform is split into two services:
-- `backend` (FastAPI + MongoDB): ingestion, scoring, intelligence synthesis, and API serving
-- `frontend` (React + Vite + TypeScript): intelligence operations dashboard UI
+---
 
-High-level flow:
-1. News is ingested from GDELT / NewsAPI / RSS.
-2. Each article is enriched with sentiment + keyword + war risk.
-3. Market snapshots are fetched from yfinance (indices/stocks/ETFs/crypto).
-4. Prediction engine produces market direction/return probabilities.
-5. Intelligence engine composes conflict, risk, forecast, and scenario views.
-6. Frontend renders map + feeds + risk cards + drilldowns in a multi-screen layout.
+## Current state (snapshot)
 
-## 2) Repository Structure
+| Area | Details |
+|------|---------|
+| **Backend** | FastAPI app with `/api/v1` router; MongoDB via PyMongo; APScheduler in a background thread on startup; optional XGBoost prediction, RL policy hooks, ground-truth ingestion (VIX / World Bank / ACLED). |
+| **Frontend** | Single-page app: `App.tsx` is the main screen (`Dashboard.tsx` is an alternate layout). Map + news embed + candlestick + tables + intel cards; styles in `src/globals.css` (viewport-aware grid for map/candlestick/bottom pane). |
+| **Deploy** | Docker Compose brings up MongoDB, backend, and frontend. CORS in `main.py` includes `https://global-montior.vercel.app` for a hosted UI. |
+
+---
+
+## System flow
+
+1. News ingested from **GDELT** / **NewsAPI** / **RSS** (configurable).
+2. Articles enriched with sentiment, keyword and war-risk scores; optional **event classification** (transformer or OpenAI embeddings, feature-flagged).
+3. **Market snapshots** refreshed via **yfinance** (indices, stocks, ETFs, crypto).
+4. **Prediction** + optional **RL** actions attached to snapshots; stored in MongoDB.
+5. **Intelligence** payload aggregates conflict tracker, risk index, forecasts, country views, etc.
+6. UI polls APIs and streams news (SSE); map loads OSINT overlays when layers are enabled.
+
+---
+
+## Repository layout
+
 ```text
 global-montior/
   backend/
     app/
-      api/
-        routes/
-          health.py
-          news.py
-          risk.py
-          markets.py
-          jobs.py
-          intelligence.py
-      core/
-        config.py
-        database.py
-      jobs/
-        scheduler.py
-      schemas/
-        news.py
-        market.py
-        risk.py
-      services/
-        news_service.py
-        sentiment_service.py
-        war_risk_service.py
-        stock_service.py
-        prediction_service.py
-        market_pipeline.py
-        risk_service.py
-        risk_map_service.py
-        youtube_service.py
-        intelligence_service.py
+      api/routes/      health, news, risk, markets, jobs, intelligence
+      core/            config.py, database.py
+      jobs/            scheduler.py
+      models/          article, market_snapshot
+      schemas/         news, market, risk
+      services/        see “Backend services” below
       main.py
     requirements.txt
     Dockerfile
-    .env
-
+    .env               (local; not committed)
   frontend/
-    src/
-      main.tsx
-      App.tsx
-      globals.css
-    components/
-      RiskMap.tsx
-      TrendChart.tsx
-    lib/
-      api.ts
+    src/               main.tsx, App.tsx, globals.css
+    components/        RiskMap, LiveCandlestickChart, TrendChart, dashboard/, ui/
+    lib/               api.ts
     vite.config.ts
     package.json
     Dockerfile
     .env
-
   docker-compose.yml
   README.md
 ```
 
-## 3) Backend Architecture
+---
 
-### 3.1 Core Services
-- `NewsService`
-  - Pulls articles from configured providers (`gdelt`, `newsapi`, `rss`)
-  - Normalizes title/source/url/published_at
-  - Enriches each article with sentiment, keyword score, war risk score, country, matched keywords
+## Backend services
 
-- `SentimentService`
-  - Uses transformer sentiment model when available
-  - Falls back safely if model load fails
+| Service | Role |
+|---------|------|
+| `NewsService` | Ingestion, normalization, enrichment |
+| `SentimentService` | Transformer or fallback sentiment |
+| `WarRiskService` | Keyword + country extraction + war-risk scoring |
+| `EventClassificationService` | Optional event type/severity on articles (`use_transformer_*` / `use_openai_*` in config) |
+| `StockService` | yfinance snapshots, OHLC **candles** for charts |
+| `PredictionService` | Up/down probability, predicted return; optional training |
+| `ReinforcementLearningService` | RL-style actions on snapshots (`rl_enabled`) |
+| `MarketPipeline` | Joins signals, refreshes `market_snapshots` |
+| `RiskService` | Global overview, high-risk countries |
+| `RiskMapService` | Map layers + optional OSINT overlays |
+| `GroundTruthService` | VIX, World Bank, ACLED when enabled |
+| `IntelligenceService` | Full dashboard payload |
+| `YouTubeService` | Resolves live channel embeds |
 
-- `WarRiskService`
-  - Geopolitical keyword scoring
-  - Country extraction from text
-  - Combined war-risk function from sentiment + keyword density
+---
 
-- `StockService`
-  - Fetches market snapshots via yfinance
-  - Supports indices, stocks, ETFs, and crypto
-  - Computes momentum, volume spike, MA20/MA50, VIX proxy
-  - Classifies `asset_type` (`index`, `stock`, `etf`, `crypto`)
-  - Prioritizes key symbols (including major crypto) when symbol cap is enforced
+## API (`/api/v1`)
 
-- `PredictionService`
-  - Produces probability of up/down move + predicted 5D return
-  - Uses trained model if available, fallback logic otherwise
+All routes below are prefixed with **`/api/v1`**.
 
-- `ReinforcementLearningService`
-  - Applies an RL-style market policy over the same feature stream
-  - Emits `buy` / `hold` / `sell` actions for each market snapshot
-  - Lives beside `PredictionService`, not in `main.py`
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/health` | Liveness |
+| GET | `/news/latest` | `?limit=` |
+| GET | `/news/stream` | SSE; `?interval_seconds=` |
+| GET | `/news/live-channels` | YouTube live channels |
+| GET | `/risk/overview` | Global risk |
+| GET | `/risk/map-layers` | `?include_osint=` `&overlays=` (comma-separated OSINT keys) |
+| GET | `/markets/snapshots` | All stored snapshots |
+| GET | `/markets/top-gainers` | `?limit=` |
+| GET | `/markets/stocks` | `?limit=` (≤100) |
+| GET | `/markets/crypto` | `?limit=` |
+| GET | `/markets/candles` | `symbol`, `period`, `interval`, `limit` (10–200) — candlestick UI |
+| POST | `/jobs/refresh` | Ingest news, refresh markets, optional ground truth, optional model train |
+| GET | `/intelligence/dashboard` | Full intel JSON |
+| GET | `/intelligence/country/{country}` | Country slice |
 
-- `MarketPipeline`
-  - Joins macro sentiment/risk signals with market features
-  - Refreshes and stores `market_snapshots`
+**Root:** `GET /` returns `{ name, disclaimer }`. Interactive docs: **`/docs`**.
 
-- `RiskService`
-  - Global war/sentiment overview
-  - High-risk country aggregation
+---
 
-- `RiskMapService`
-  - Returns map layers (war/nuclear/bunkers/chokepoints)
+## MongoDB collections (high level)
 
-- `IntelligenceService`
-  - Composes full intelligence dashboard payload:
-    - conflict tracker
-    - real-time sentiment
-    - breaking event detection
-    - global risk index
-    - market impact predictor
-    - commodity risk monitor
-    - trade route/chokepoint risk
-    - military/nuclear/civil unrest monitors
-    - AI news summaries
-    - event timeline
-    - country risk dashboard
-    - predictive geopolitics engine
-    - classification outputs
-    - 7D/30D forecast panel
-    - UI metadata
+- **`articles`** — text, scores, sentiment, war risk, optional event fields  
+- **`market_snapshots`** — price, momentum, predictions, RL fields, `as_of`  
+- **`ground_truth_vix`**, **`ground_truth_economic`**, **`ground_truth_conflicts`** — when ground truth is enabled  
 
-### 3.2 API Routes
-Base prefix: `/api/v1`
+---
 
-- Health
-  - `GET /health`
+## Configuration (`backend/.env`)
 
-- News
-  - `GET /news/latest?limit=20`
-  - `GET /news/stream?limit=15&interval_seconds=8` (SSE)
-  - `GET /news/live-channels`
+Loaded via Pydantic Settings (`app/core/config.py`). Common variables:
 
-- Risk
-  - `GET /risk/overview`
-  - `GET /risk/map-layers`
+| Variable | Purpose |
+|----------|---------|
+| `MONGODB_URL`, `MONGODB_DB_NAME` | Mongo connection |
+| `NEWS_PROVIDER`, `NEWS_SOURCES`, `NEWS_API_KEY`, `RSS_FEEDS`, `NEWS_INGEST_LIMIT` | News ingestion |
+| `YOUTUBE_API_KEY` | Live channels |
+| `CORS_ORIGINS` | Comma-separated origins (note: production CORS also lists Vercel in `main.py`) |
+| `STOCK_SYMBOLS`, `STOCK_HISTORY_PERIOD`, `STOCK_MIN_POINTS`, `STOCK_MAX_SYMBOLS` | Markets |
+| `MODEL_AUTO_TRAIN_ON_REFRESH`, `MODEL_TRAIN_RETRY_MINUTES` | Training on refresh |
+| `USE_TRANSFORMER_SENTIMENT` | Heavier sentiment path |
+| `RL_ENABLED`, `RL_POLICY_NAME` | RL policy |
+| `USE_TRANSFORMER_EVENT_CLASSIFIER`, `USE_OPENAI_EVENT_CLASSIFIER`, `OPENAI_API_KEY`, `OPENAI_EMBEDDINGS_MODEL` | Event classification |
+| `GROUND_TRUTH_ENABLED`, `ACLED_API_KEY`, `ACLED_EMAIL` | Ground truth |
+| `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MINUTES` | Background jobs |
 
-- Markets
-  - `GET /markets/snapshots`
-  - `GET /markets/top-gainers?limit=5`
-  - `GET /markets/stocks?limit=25`
-  - `GET /markets/crypto?limit=25`
+**Frontend (`frontend/.env`):** `VITE_API_BASE=http://localhost:8000/api/v1` (or your deployed API URL).
 
-- Intelligence
-  - `GET /intelligence/dashboard`
-  - `GET /intelligence/country/{country}`
+---
 
-- Jobs
-  - `POST /jobs/refresh` – Single job: news + markets + ground truth + optional model training (wired to frontend refresh button)
+## Frontend (`frontend`)
 
-### 3.3 Ground Truth Datasets (Train/Validate)
-The system can ingest ground truth data for model training and validation instead of relying only on news sentiment and keyword risk:
+- **Entry:** `src/main.tsx` → `App.tsx` (not `Dashboard.tsx` by default).
+- **Map:** `components/RiskMap.tsx` — heatmap, zoom, layer chips, OSINT layers when requested.
+- **Markets:** `LiveCandlestickChart.tsx` (`/markets/candles`), `TrendChart.tsx` (Recharts).
+- **API:** `lib/api.ts` — typed client; Vite alias `@` → project root.
+- **Layout:** CSS grid (`screen-grid`): map (top-left), live news + candlestick (right), gainers / high-risk / trend (bottom-left), intel cards below. Map and candlestick use viewport-relative sizing so more content fits on one screen (`globals.css`).
 
-- **CBOE VIX** – via yfinance (`^VIX`), stored in `ground_truth_vix` for backtesting
-- **World Bank** – GDP growth, inflation, debt (% GDP) – free API, no key
-- **ACLED** – conflict event data – requires free registration at [ACLED](https://acleddata.com/register/)
+**Dependencies (current):** React 18, Vite 5, `react-simple-maps`, `recharts`.
 
-Set `GROUND_TRUTH_ENABLED=true`, and optionally `ACLED_API_KEY` and `ACLED_EMAIL` in `.env`. Ground truth is included in `POST /jobs/refresh` (frontend refresh button) and in the scheduler cycle.
+---
 
-### 3.4 Storage Model (MongoDB)
-- `articles`
-  - title, source, url, summary, country, published_at
-  - sentiment_score, keyword_score, war_risk_score, matched_keywords
+## Run locally
 
-- `market_snapshots`
-  - symbol, name, asset_type, price
-  - momentum_7d, volume_spike_pct, ma20, ma50, vix_proxy
-  - prob_up, prob_down, predicted_return_5d, confidence, risk_level, model_used
-  - rl_action, rl_confidence, rl_state, rl_policy, as_of
+**Backend**
 
-- `ground_truth_vix` – CBOE VIX history (date, close, source)
-- `ground_truth_economic` – World Bank indicators (country_iso, year, indicator, value)
-- `ground_truth_conflicts` – ACLED events (event_date, country, event_type, fatalities)
-
-### 3.5 Time-Series Intelligence
-The prediction engine uses:
-- **Rolling sentiment windows** (3d, 7d, 14d) with lag weighting (14d higher – markets react with delay)
-- **Lagged momentum features** (1d, 3d ago) for overreaction cycles
-- **XGBoost** as the main model (no extra deps, low load)
-
-### 3.6 Background/Scheduling
-- APScheduler job runner available in backend
-- Supports periodic ingestion + market refresh flow
-
-## 4) Frontend Architecture
-
-### 4.1 App Composition
-- `src/main.tsx`: app bootstrap
-- `src/App.tsx`: orchestration + multi-panel dashboard
-- `components/RiskMap.tsx`: global map + layer controls
-- `components/TrendChart.tsx`: trend/market chart
-- `lib/api.ts`: typed API client
-
-### 4.2 Major Dashboard Panels
-- Global risk + refresh controls
-- High-risk countries with click-to-open threat popup
-- Live news stream (SSE)
-- Live news channels carousel
-  - manual navigation
-  - channel chips
-  - optional auto-switch toggle
-- Top predicted gainers table
-- Conflict tracker
-- Risk index block
-- Market impact predictor
-- Stocks & crypto data tables
-- Commodity + chokepoint monitor
-- Military / nuclear / civil unrest feeds
-- AI summaries + timeline
-- Country risk dashboard (drilldown)
-- Predictive geopolitics + forecast
-- Scenario simulation cards
-
-### 4.3 High-Risk Country Popup
-Clicking a country in "High-Risk Countries" opens a modal showing:
-- risk percentage at top
-- future market risk estimate
-- sentiment
-- military activity signals
-- top potential threat headlines
-
-## 5) Configuration
-
-### 5.1 Backend (`backend/.env`)
-Common keys:
-- `MONGODB_URL`, `MONGODB_DB_NAME`
-- `NEWS_PROVIDER`, `NEWS_SOURCES`, `NEWS_API_KEY`, `RSS_FEEDS`
-- `YOUTUBE_API_KEY`
-- `CORS_ORIGINS=http://localhost:3000,http://localhost:5173`
-- `STOCK_SYMBOLS=DEFAULT`
-- `STOCK_HISTORY_PERIOD=6mo`
-- `STOCK_MIN_POINTS=55`
-- `STOCK_MAX_SYMBOLS=30`
-
-### 5.2 Frontend (`frontend/.env`)
-- `VITE_API_BASE=http://localhost:8000/api/v1`
-
-## 6) Running the Project
-
-### Local
-Backend:
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Frontend:
+**Frontend**
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### Docker
+Vite dev server defaults to port **5173**; ensure `VITE_API_BASE` points at the API.
+
+**Docker Compose**
+
 ```bash
 docker compose up --build
 ```
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
 
-## 7) Current Capability Snapshot
-- End-to-end ingestion -> scoring -> risk -> forecasting pipeline
-- Real-time dashboard with intelligence-focused dark UI
-- Country-level threat drilldown popup
-- Stocks + crypto exposure integrated into risk workflow
-- Scenario cards for quick strategic what-if monitoring
+`docker-compose.yml` references `env_file` paths for backend and frontend; if those files are missing, copy from your local **`backend/.env`** / **`frontend/.env`** or add the example files the compose file expects. Published ports: MongoDB **27017**, API **8000**, UI **3000** (Vite preview in the frontend image).
 
-## 8) Disclaimer
+---
+
+## Prediction / ML (brief)
+
+- Rolling sentiment windows and lagged momentum features; **XGBoost** when trained.  
+- Ground truth (VIX, macro, ACLED) can support training/validation when enabled.  
+- RL policy is optional and stored on snapshots.
+
+---
+
+## Disclaimer
+
 Not financial advice.

@@ -16,6 +16,12 @@
   box-sizing: border-box;
 }
 
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
 body {
   margin: 0;
   font-family: "JetBrains Mono", "IBM Plex Mono", "Fira Code", "SFMono-Regular", monospace;
@@ -46,9 +52,13 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 0;
   overflow: visible;
-  padding: 6px 8px;
+  padding: 0;
+}
+
+.dashboard-screen > section {
+  margin: 0;
 }
 
 .hero {
@@ -56,7 +66,11 @@ body {
   justify-content: space-between;
   gap: 16px;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
 }
 
 .eyebrow {
@@ -95,7 +109,7 @@ h1 {
 .refresh-icon-btn {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 0;
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--panel-text);
@@ -112,14 +126,14 @@ h1 {
 .grid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 0;
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 8px;
   backdrop-filter: blur(4px);
 }
@@ -130,13 +144,26 @@ h1 {
 
 .map-center {
   display: flex;
-  justify-content: center;
-  margin-bottom: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: stretch;
+  margin: 0;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.map-center > * {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
 }
 
 .map-card {
   width: 100%;
   max-width: 100%;
+  min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -193,10 +220,12 @@ h1 {
 }
 
 .map-stage {
-  height: 100%;
-  min-height: 220px;
+  flex: 1 1 auto;
+  min-height: 160px;
+  max-height: min(320px, 38vh);
+  height: auto;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 0;
   overflow: hidden;
   background: radial-gradient(circle at center, #112116 0%, #060c08 70%);
 }
@@ -308,6 +337,7 @@ h1 {
 
 .status-line {
   margin: 0;
+  padding: 4px 10px;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
@@ -333,25 +363,42 @@ h1 {
   display: grid;
   grid-template-columns: 2.1fr 0.9fr;
   grid-template-rows: auto auto;
-  gap: 7px;
-  align-items: start;
+  gap: 0;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-top: none;
 }
 
 .intel-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  margin-top: 7px;
-  padding-bottom: 12px;
+  gap: 0;
+  margin-top: 0;
+  padding-bottom: 0;
+  border: 1px solid var(--line);
+  border-top: none;
+}
+
+.intel-grid > .card {
+  border: solid var(--line);
+  border-width: 0 1px 1px 0;
+  margin: 0;
+}
+
+.intel-grid > .card:nth-child(2n) {
+  border-right-width: 0;
 }
 
 .alert-banner {
   background: linear-gradient(90deg, #3d0f1a, #631325);
   color: #ffd8e3;
   border: 1px solid #ff7b98;
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 0;
+  padding: 8px 10px;
   font-size: 13px;
+  margin: 0;
+  border-left: none;
+  border-right: none;
 }
 
 .mono-line {
@@ -375,14 +422,18 @@ h1 {
 .scenario-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
 }
 
 .scenario-card {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 10px;
   background: #0f1f35;
+}
+
+.scenario-grid > .scenario-card + .scenario-card {
+  border-left: none;
 }
 
 .scenario-card h4 {
@@ -459,9 +510,20 @@ h1 {
   grid-row: 1 / span 2;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 0;
   min-height: 0;
-  overflow: auto;
+  align-self: stretch;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.side-pane > .card:first-child {
+  border-left: none;
+}
+
+.side-pane > .card + .card {
+  border-top: none;
 }
 
 .bottom-pane {
@@ -469,14 +531,30 @@ h1 {
   grid-row: 2;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(260px, auto);
-  gap: 7px;
+  grid-auto-rows: minmax(200px, auto);
+  gap: 0;
   min-height: 0;
-  align-items: start;
+  align-items: stretch;
 }
 
-.map-card {
-  min-height: 440px;
+.bottom-pane > .card {
+  border-radius: 0;
+}
+
+.bottom-pane > .card:nth-child(1),
+.bottom-pane > .card:nth-child(2) {
+  border-top: none;
+}
+
+.bottom-pane > .card:nth-child(2) {
+  border-left: none;
+  margin-left: -1px;
+}
+
+.bottom-pane > .trend-card {
+  grid-column: 1 / -1;
+  border-top: none;
+  margin: 0;
 }
 
 .pane-scroll {
@@ -489,8 +567,18 @@ h1 {
   overflow: hidden;
 }
 
+.trend-card > div:last-child {
+  margin: 0;
+  padding: 0;
+}
+
+.trend-card .recharts-responsive-container {
+  margin: 0 !important;
+}
+
 .candlestick-card {
-  min-height: 360px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -501,10 +589,12 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .candlestick-toolbar {
-  margin: 8px 0 10px;
+  margin: 6px 0 6px;
+  flex-shrink: 0;
 }
 
 .candlestick-toolbar label {
@@ -524,10 +614,11 @@ h1 {
 .candlestick-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 10px;
+  gap: 6px;
+  margin: 0 0 6px;
   color: #d7ffe0;
   font-size: 12px;
+  flex-shrink: 0;
 }
 
 .candlestick-stats span {
@@ -539,11 +630,15 @@ h1 {
 
 .candlestick-wrap {
   width: 100%;
-  min-height: 320px;
+  min-height: 0;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 0;
   background:
     linear-gradient(180deg, rgba(12, 34, 20, 0.98), rgba(3, 8, 5, 0.98)),
     repeating-linear-gradient(
@@ -557,7 +652,9 @@ h1 {
 
 .candlestick-svg {
   width: 100%;
-  height: 320px;
+  height: 100%;
+  min-height: 160px;
+  flex: 1 1 auto;
   display: block;
 }
 
@@ -656,7 +753,7 @@ h1 {
   width: 100%;
   height: 200px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
   background: #030a05;
 }
@@ -724,7 +821,7 @@ h1 {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  min-height: 320px;
+  min-height: 0;
   gap: 4px;
 }
 
@@ -756,8 +853,8 @@ h1 {
   .dashboard-screen {
     height: auto;
     overflow: visible;
-    padding: 24px;
-    gap: 12px;
+    padding: 0;
+    gap: 0;
   }
 
   .status-line {
@@ -797,6 +894,8 @@ h1 {
   }
 
   .map-stage {
-    height: 380px;
+    min-height: 200px;
+    max-height: min(380px, 55vh);
+    height: auto;
   }
 }
