@@ -348,10 +348,12 @@ class PredictionService:
         momentum_1d: float = 0.0,
         momentum_3d: float = 0.0,
     ) -> PredictionResult:
-        try:
-            train_result = self.train_if_needed(force=False)
-        except Exception:
-            train_result = {"trained": False, "reason": "train_call_failed", "metrics": {}}
+        train_result = {"trained": False, "reason": "train_skipped", "metrics": {}}
+        if settings.model_train_on_predict:
+            try:
+                train_result = self.train_if_needed(force=False)
+            except Exception:
+                train_result = {"trained": False, "reason": "train_call_failed", "metrics": {}}
         if self._cls_model is None or self._reg_model is None:
             return self.predict_rule_based(
                 sentiment_score=sentiment_score,
