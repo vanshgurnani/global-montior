@@ -31,12 +31,15 @@ class Settings(BaseSettings):
 
     scheduler_enabled: bool = True
     scheduler_interval_minutes: int = 15
+    intelligence_auto_refresh_on_read: bool = False
+    intelligence_dashboard_cache_seconds: int = 120
 
     stock_symbols: str = "DEFAULT"  # csv symbols or DEFAULT
     stock_history_period: str = "6mo"
     stock_min_points: int = 55
     stock_max_symbols: int = 30
     model_auto_train_on_refresh: bool = False
+    model_train_on_predict: bool = False
     model_train_retry_minutes: int = 60
     use_transformer_sentiment: bool = False
     rl_enabled: bool = True

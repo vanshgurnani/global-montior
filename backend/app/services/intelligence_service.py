@@ -121,6 +121,10 @@ class IntelligenceService:
         "India": "South Asia",
     }
 
+    def __init__(self) -> None:
+        self._dashboard_cache: dict[str, Any] | None = None
+        self._dashboard_cache_expires_at: datetime | None = None
+
     def _stale_or_missing(self, db: Database, collection: str, time_field: str, min_rows: int, max_age_hours: int) -> bool:
         now = _utc_now()
         horizon = now - timedelta(hours=max_age_hours)
@@ -134,6 +138,10 @@ class IntelligenceService:
             "news_reason": "",
             "markets_reason": "",
         }
+        if not settings.intelligence_auto_refresh_on_read:
+            status["news_reason"] = "skipped_on_read"
+            status["markets_reason"] = "skipped_on_read"
+            return status
         try:
             if self._stale_or_missing(db, "articles", "published_at", min_rows=24, max_age_hours=12):
                 result = news_service.ingest_with_stats(db)
@@ -516,6 +524,16 @@ class IntelligenceService:
         return prediction_vs_reality[:15]
 
     def dashboard(self, db: Database) -> dict[str, Any]:
+        now = _utc_now()
+        cache_ttl = max(0, int(settings.intelligence_dashboard_cache_seconds))
+        if (
+            cache_ttl > 0
+            and self._dashboard_cache is not None
+            and self._dashboard_cache_expires_at is not None
+            and now < self._dashboard_cache_expires_at
+        ):
+            return self._dashboard_cache
+
         freshness = self._ensure_live_inputs(db)
         articles = self._latest_articles(db, limit=320)
         markets = self._latest_markets(db)
@@ -658,7 +676,7 @@ class IntelligenceService:
         top_conflict_prob = max((float(c["war_probability"]) for c in conflicts), default=0.2)
         upcoming_world_war_probability = _clip(0.55 * top_conflict_prob + 0.45 * float(instability))
 
-        return {
+        payload = {
             "generated_at": _utc_now().isoformat(),
             "global_conflict_tracker": conflicts,
             "real_time_sentiment": {
@@ -712,6 +730,10 @@ class IntelligenceService:
                 "market_rows_used": len(markets),
             },
         }
+        if cache_ttl > 0:
+            self._dashboard_cache = payload
+            self._dashboard_cache_expires_at = now + timedelta(seconds=cache_ttl)
+        return payload
 
 
 intelligence_service = IntelligenceService()
